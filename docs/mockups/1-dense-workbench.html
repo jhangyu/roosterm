@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Roosterm — Mockup 1: Dense Workbench</title>
+<style>
+/* =====================================================================
+   Tokens — map 1:1 to shadcn/ui CSS variables (HSL not required; hex OK
+   with Tailwind v4 `@theme inline`). Source of every value is noted.
+   ===================================================================== */
+:root {
+  /* Fluent 2 web brand ramp (@fluentui/tokens brandWeb) */
+  --brand-60: #0f548c; --brand-70: #115ea3; --brand-80: #0f6cbd;
+  --brand-90: #2886de; --brand-150: #cfe4fa; --brand-160: #ebf3fc;
+
+  /* Fluent 2 neutral greys (lightColor aliases) */
+  --grey-14: #242424; /* colorNeutralForeground1 */
+  --grey-26: #424242; /* colorNeutralForeground2 */
+  --grey-38: #616161; /* colorNeutralForeground3 / StrokeAccessible */
+  --grey-82: #d1d1d1; /* colorNeutralStroke1 */
+  --grey-88: #e0e0e0; /* colorNeutralStroke2 */
+  --grey-92: #ebebeb; /* colorNeutralBackground5 */
+  --grey-94: #f0f0f0; /* colorNeutralBackground4 / Stroke3 */
+  --grey-96: #f5f5f5; /* colorNeutralBackground3 */
+  --grey-98: #fafafa; /* colorNeutralBackground2 */
+
+  /* Fluent 2 status (statusColorMapping: success=green, warning=orange, danger=cranberry) */
+  --success-bg: #f1faf1; --success-border: #9fd89f; --success-fg: #0e700e;
+  --warning-bg: #fff9f5; --warning-border: #fdcfb4; --warning-fg: #bc4b09; /* shade20 for AA text */
+  --danger-bg:  #fdf3f4; --danger-border:  #eeacb2; --danger-fg:  #b10e1c;
+
+  /* shadcn/ui semantic variables */
+  --background: var(--grey-96);
+  --foreground: var(--grey-14);
+  --card: #ffffff;              --card-foreground: var(--grey-14);
+  --popover: #ffffff;           --popover-foreground: var(--grey-14);
+  --primary: var(--brand-80);   --primary-foreground: #ffffff;
+  --primary-hover: var(--brand-70); --primary-pressed: var(--brand-60);
+  --secondary: #ffffff;         --secondary-foreground: var(--grey-14);
+  --muted: var(--grey-94);      --muted-foreground: var(--grey-38);
+  --accent: var(--brand-160);   --accent-foreground: var(--brand-70);
+  --destructive: var(--danger-fg);
+  --border: var(--grey-88);     --input: var(--grey-82);
+  --ring: var(--grey-14);       /* Fluent focus stroke = Foreground1, 2px */
+
+  /* Terminal (light) — ANSI slots drawn from Fluent ramps */
+  --term-bg: #ffffff; --term-fg: var(--grey-14); --term-dim: #707070;
+  --ansi-red: #b10e1c; --ansi-green: #0e700e; --ansi-yellow: #8a3707;
+  --ansi-blue: var(--brand-70); --ansi-magenta: #7f1c8d; --ansi-cyan: #00666d;
+  --ansi-orange: #bc4b09;
+  --diff-add: #c9eac9; --diff-del: #f6d1d5;
+  --term-select: var(--brand-150);
+
+  /* Material 3 shape scale (md.sys.shape.corner.*) */
+  --radius-none: 0px;   /* corner-none */
+  --radius-xs: 4px;     /* corner-extra-small — tabs, buttons, inputs, keys */
+  --radius-sm: 8px;     /* corner-small — menus, list rows, banners */
+  --radius-md: 12px;    /* corner-medium — cards, dialog (dense override of M3 28px) */
+  --radius-lg: 16px;    /* corner-large — phone sheet */
+  --radius-xl: 28px;    /* corner-extra-large — unused in this direction */
+  --radius-full: 9999px;/* corner-full — status pills, avatar */
+  --radius: var(--radius-xs); /* shadcn base radius */
+
+  /* Fluent 2 type */
+  --font-sans: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, "Courier New", monospace; /* Fluent fontFamilyMonospace + platform fallbacks */
+  --fs-100: 10px; --lh-100: 14px;   /* caption2 */
+  --fs-200: 12px; --lh-200: 16px;   /* caption1 — chrome default here */
+  --fs-300: 14px; --lh-300: 20px;   /* body1 */
+  --fs-400: 16px; --lh-400: 22px;   /* subtitle2 */
+  --fs-500: 20px; --lh-500: 28px;   /* subtitle1 */
+  --fs-600: 24px; --lh-600: 32px;   /* title3 */
+  --fs-term: 13px; --lh-term: 18px; /* terminal cell */
+
+  /* Fluent 2 elevation (createLightTheme shadows) */
+  --shadow-2:  0 0 2px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.14);
+  --shadow-4:  0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14);
+  --shadow-16: 0 0 2px rgba(0,0,0,.12), 0 8px 16px rgba(0,0,0,.14);
+  --shadow-28: 0 0 8px rgba(0,0,0,.12), 0 14px 28px rgba(0,0,0,.14);
+  --shadow-64: 0 0 8px rgba(0,0,0,.12), 0 32px 64px rgba(0,0,0,.14);
+
+  /* Fluent 2 motion */
+  --dur-fast: 150ms; --dur-normal: 200ms;
+  --ease: cubic-bezier(0.33,0,0.67,1);      /* curveEasyEase */
+  --ease-decel: cubic-bezier(0,0,0,1);      /* curveDecelerateMid */
+
+  /* Dense chrome metrics */
+  --h-titlebar: 32px; --h-tabbar: 34px; --h-statusbar: 22px;
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--background); color: var(--foreground);
+  font: 400 var(--fs-300)/var(--lh-300) var(--font-sans);
+  padding-block: 32px 64px; padding-inline: 16px;
+}
+.ic { width: 16px; height: 16px; flex: none; display: block; }
+.ic-20 { width: 20px; height: 20px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---------- Showcase page shell ---------- */
+.page { max-width: 1320px; margin: 0 auto; }
+.doc-head h1 { font-size: var(--fs-600); line-height: var(--lh-600); font-weight: 600; margin: 0 0 4px; }
+.doc-head p { margin: 0; color: var(--muted-foreground); }
+.spec { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin: 20px 0 40px; }
+.spec section { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; }
+.spec h2 { font-size: var(--fs-200); line-height: var(--lh-200); text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); margin: 0 0 10px; font-weight: 600; }
+.spec table { border-collapse: collapse; width: 100%; font-size: var(--fs-200); line-height: var(--lh-200); }
+.spec td { padding: 3px 0; vertical-align: middle; }
+.spec td:last-child { text-align: right; font-family: var(--font-mono); color: var(--grey-26); }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 2px; border: 1px solid rgba(0,0,0,.12); vertical-align: -2px; margin-right: 6px; }
+.rad { display: inline-block; width: 22px; height: 14px; border: 1.5px solid var(--brand-80); border-right: 0; border-bottom: 0; vertical-align: -3px; margin-right: 6px; }
+.spec ul { margin: 0; padding-left: 18px; font-size: var(--fs-200); line-height: 18px; }
+.spec li + li { margin-top: 6px; }
+.spec b { font-weight: 600; }
+
+.screen { margin-bottom: 48px; }
+.screen-label { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; }
+.screen-label .n { font: 600 var(--fs-200)/1 var(--font-mono); color: var(--primary); background: var(--accent); border-radius: var(--radius-xs); padding: 3px 6px; }
+.screen-label h2 { font-size: var(--fs-400); line-height: var(--lh-400); font-weight: 600; margin: 0; }
+.screen-label span.note { color: var(--muted-foreground); font-size: var(--fs-200); }
+.scroller { overflow-x: auto; padding-bottom: 6px; }
+
+/* ---------- App frame (desktop) ---------- */
+.app {
+  width: 1280px; height: 720px; display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--grey-82); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-16); overflow: hidden; position: relative;
+  font-size: var(--fs-200); line-height: var(--lh-200);
+}
+.app.short { height: 560px; }
+
+.titlebar {
+  height: var(--h-titlebar); display: flex; align-items: center; gap: 8px; padding: 0 6px 0 10px;
+  background: var(--grey-98); border-bottom: 1px solid var(--border); flex: none;
+}
+.brandmark { display: flex; align-items: center; gap: 6px; font-weight: 600; letter-spacing: -.01em; }
+.brandmark i { width: 14px; height: 14px; border-radius: var(--radius-xs); background: var(--primary); display: grid; place-items: center; color: #fff; font: 700 9px/1 var(--font-mono); font-style: normal; }
+.crumb { color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
+.crumb .sep { color: var(--grey-82); }
+.spacer { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border-radius: var(--radius-full); font-size: var(--fs-100); line-height: var(--lh-100); font-weight: 600; border: 1px solid; }
+.pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { color: var(--success-fg); background: var(--success-bg); border-color: var(--success-border); }
+.pill.warn { color: var(--warning-fg); background: var(--warning-bg); border-color: var(--warning-border); }
+.pill.neutral { color: var(--grey-26); background: var(--grey-96); border-color: var(--grey-88); }
+.pill.brand { color: var(--brand-70); background: var(--brand-160); border-color: var(--brand-150); }
+
+.ibtn { width: 24px; height: 24px; display: grid; place-items: center; border: 0; background: transparent; border-radius: var(--radius-xs); color: var(--grey-26); transition: background var(--dur-fast) var(--ease); }
+.ibtn:hover { background: var(--grey-92); color: var(--grey-14); }
+.ibtn:active { background: var(--grey-88); }
+.avatar { width: 22px; height: 22px; border-radius: var(--radius-full); background: var(--brand-150); color: var(--brand-60); display: grid; place-items: center; font-size: var(--fs-100); font-weight: 600; }
+
+/* Tab bar: IDE-style flat tabs, active tab merges into terminal */
+.tabbar { height: var(--h-tabbar); display: flex; align-items: flex-end; background: var(--grey-96); border-bottom: 1px solid var(--border); padding: 0 4px; gap: 1px; flex: none; }
+.tab {
+  height: 30px; min-width: 0; max-width: 240px; display: flex; align-items: center; gap: 6px; padding: 0 4px 0 10px;
+  border: 1px solid transparent; border-bottom: 0; border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  color: var(--grey-38); background: transparent; position: relative; top: 1px; white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.tab:hover { background: var(--grey-92); color: var(--grey-14); }
+.tab.active { background: var(--term-bg); color: var(--grey-14); border-color: var(--border); height: 31px; }
+.tab.active::before { content: ""; position: absolute; left: -1px; right: -1px; top: -1px; height: 2px; background: var(--primary); border-radius: var(--radius-xs) var(--radius-xs) 0 0; }
+.tab .t { overflow: hidden; text-overflow: ellipsis; }
+.tab .t small { color: var(--muted-foreground); font-size: inherit; margin-left: 4px; }
+.tab .badge { font: 600 var(--fs-100)/14px var(--font-sans); padding: 0 5px; border-radius: var(--radius-full); }
+.tab .badge.live { color: var(--brand-70); background: var(--brand-160); }
+.tab .badge.exit { color: var(--grey-26); background: var(--grey-92); }
+.tab .busy { width: 6px; height: 6px; border-radius: 50%; background: var(--ansi-orange); box-shadow: 0 0 0 3px #fee5d7; }
+.tab .x { width: 20px; height: 20px; display: grid; place-items: center; border-radius: var(--radius-xs); border: 0; background: transparent; color: inherit; opacity: .7; }
+.tab .x:hover { background: var(--grey-88); opacity: 1; }
+.tab .x .ic { width: 12px; height: 12px; }
+.tab.exited .t { color: var(--muted-foreground); font-style: italic; }
+.newtab { height: 26px; margin: 0 0 3px 4px; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 6px; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--grey-26); }
+.newtab:hover { background: var(--grey-92); }
+.newtab kbd { font: 500 var(--fs-100)/1 var(--font-mono); color: var(--muted-foreground); border: 1px solid var(--grey-82); border-radius: 3px; padding: 2px 4px; background: #fff; }
+.tabbar .tools { margin-left: auto; display: flex; gap: 2px; align-self: center; }
+
+/* Terminal */
+.term { flex: 1; min-height: 0; position: relative; background: var(--term-bg); overflow: hidden; }
+.term pre {
+  margin: 0; padding: 8px 12px; font: 400 var(--fs-term)/var(--lh-term) var(--font-mono); color: var(--term-fg);
+  white-space: pre; font-variant-ligatures: none; tab-size: 8;
+}
+.term .gutter { position: absolute; right: 0; top: 0; bottom: 0; width: 10px; }
+.term .gutter::after { content: ""; position: absolute; right: 2px; top: 38%; height: 34%; width: 6px; border-radius: var(--radius-full); background: rgba(0,0,0,.18); }
+.cur { background: var(--term-fg); color: var(--term-bg); }
+.cur-hollow { outline: 1px solid var(--term-fg); outline-offset: -1px; }
+.r { color: var(--ansi-red); } .g { color: var(--ansi-green); } .y { color: var(--ansi-yellow); }
+.b { color: var(--ansi-blue); } .m { color: var(--ansi-magenta); } .c { color: var(--ansi-cyan); }
+.o { color: var(--ansi-orange); } .d { color: var(--term-dim); } .B { font-weight: 700; }
+.add, .del { display: inline-block; width: var(--diff-w, 84ch); vertical-align: top; }
+.add { background: var(--diff-add); } .del { background: var(--diff-del); }
+.phone .term { --diff-w: 33ch; }
+.sel { background: var(--term-select); }
+
+/* Status bar */
+.statusbar { height: var(--h-statusbar); flex: none; display: flex; align-items: center; gap: 14px; padding: 0 10px; background: var(--grey-98); border-top: 1px solid var(--border); color: var(--grey-38); font-size: var(--fs-100); line-height: var(--lh-100); white-space: nowrap; }
+.statusbar .si { display: flex; align-items: center; gap: 5px; }
+.statusbar .si .ic { width: 12px; height: 12px; }
+.statusbar .ok { color: var(--success-fg); }
+.statusbar .warn { color: var(--warning-fg); font-weight: 600; }
+.statusbar .push { margin-left: auto; }
+
+/* Buttons (Fluent 2 shape → M3 corner-extra-small) */
+.btn { height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border-radius: var(--radius-xs); border: 1px solid var(--input); background: var(--secondary); font-size: var(--fs-300); font-weight: 600; transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease); }
+.btn:hover { background: var(--grey-96); border-color: #c7c7c7; }
+.btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
+.btn.primary:hover { background: var(--primary-hover); }
+.btn.primary:active { background: var(--primary-pressed); }
+.btn.sm { height: 24px; padding: 0 8px; font-size: var(--fs-200); gap: 4px; }
+.btn.subtle { border-color: transparent; background: transparent; }
+.btn.subtle:hover { background: var(--grey-92); }
+
+/* Banner (Fluent MessageBar) */
+.msgbar { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; min-height: 36px; border-bottom: 1px solid; font-size: var(--fs-200); flex: none; }
+.msgbar.warn { background: var(--warning-bg); border-color: var(--warning-border); }
+.msgbar.warn > .ic { color: var(--warning-fg); }
+.msgbar b { font-weight: 600; }
+.msgbar .meta { color: var(--grey-38); font-family: var(--font-mono); font-size: var(--fs-100); }
+.msgbar .actions { margin-left: auto; display: flex; gap: 4px; }
+.term.stale pre { opacity: .45; filter: grayscale(1); }
+.term.stale::after { content: "Read-only — output paused while disconnected"; position: absolute; right: 12px; bottom: 10px; font-size: var(--fs-100); color: var(--grey-38); background: var(--grey-96); border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 2px 6px; }
+
+/* Exit strip inside terminal */
+.exitstrip { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; background: var(--grey-98); border-top: 1px solid var(--border); font-size: var(--fs-200); }
+.exitstrip > .ic { color: var(--success-fg); }
+.exitstrip b { font-weight: 600; }
+.exitstrip .code { font-family: var(--font-mono); color: var(--grey-38); }
+.exitstrip .actions { margin-left: auto; display: flex; gap: 4px; }
+
+/* Dialog */
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.40); display: grid; place-items: center; }
+.dialog { width: 480px; background: var(--popover); border-radius: var(--radius-md); box-shadow: var(--shadow-64); padding: 20px 20px 16px; font-size: var(--fs-300); line-height: var(--lh-300); }
+.dialog h3 { margin: 0 0 2px; font-size: var(--fs-500); line-height: var(--lh-500); font-weight: 600; display: flex; align-items: center; }
+.dialog h3 .ibtn { margin-left: auto; }
+.dialog .sub { margin: 0 0 14px; color: var(--muted-foreground); font-size: var(--fs-200); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.opt { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 10px 12px; border: 1px solid var(--input); border-radius: var(--radius-sm); background: #fff; }
+.opt .ic { margin-top: 2px; color: var(--grey-38); width: 20px; height: 20px; }
+.opt b { display: block; font-weight: 600; }
+.opt small { display: block; font-size: var(--fs-200); line-height: var(--lh-200); color: var(--muted-foreground); }
+.opt.on { border: 2px solid var(--primary); padding: 9px 11px; background: var(--brand-160); }
+.opt.on .ic { color: var(--primary); }
+.fieldlabel { font-size: var(--fs-200); font-weight: 600; margin: 0 0 6px; display: flex; justify-content: space-between; }
+.fieldlabel span { font-weight: 400; color: var(--muted-foreground); }
+.socklist { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 18px; }
+.sock { display: grid; grid-template-columns: 16px 1fr auto; gap: 10px; align-items: center; padding: 8px 12px; font-size: var(--fs-200); line-height: var(--lh-200); }
+.sock + .sock { border-top: 1px solid var(--border); }
+.sock code { font: 500 var(--fs-200)/var(--lh-200) var(--font-mono); color: var(--grey-14); }
+.sock small { display: block; color: var(--muted-foreground); font-size: var(--fs-100); line-height: var(--lh-100); }
+.sock.on { background: var(--brand-160); }
+.radio { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--grey-38); display: grid; place-items: center; }
+.sock.on .radio { border-color: var(--primary); }
+.sock.on .radio::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+.dialog .foot { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Login */
+.login-stage { width: 1280px; height: 640px; border: 1px solid var(--grey-82); border-radius: var(--radius-sm); box-shadow: var(--shadow-16); overflow: hidden; display: grid; grid-template-columns: 1fr 440px; background: #fff; }
+.login-art { background: var(--grey-98); border-right: 1px solid var(--border); position: relative; overflow: hidden; }
+.login-art pre { margin: 0; padding: 28px 32px; font: 400 12px/18px var(--font-mono); color: var(--grey-38); white-space: pre; }
+.login-art .cap { position: absolute; left: 32px; bottom: 28px; font-size: var(--fs-200); color: var(--muted-foreground); display: flex; gap: 6px; align-items: center; }
+.login-pane { display: flex; flex-direction: column; justify-content: center; padding: 0 48px; }
+.login-pane .brandmark { font-size: var(--fs-400); margin-bottom: 28px; }
+.login-pane .brandmark i { width: 22px; height: 22px; font-size: 12px; border-radius: var(--radius-xs); }
+.login-pane h3 { font-size: var(--fs-600); line-height: var(--lh-600); font-weight: 600; margin: 0 0 4px; }
+.login-pane p { margin: 0 0 24px; color: var(--muted-foreground); }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: var(--fs-300); font-weight: 600; margin-bottom: 4px; }
+.input { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 10px; border: 1px solid var(--input); border-bottom-color: var(--grey-38); border-radius: var(--radius-xs); background: #fff; color: var(--muted-foreground); }
+.input.focus { border-bottom: 2px solid var(--primary); padding-bottom: 0; color: var(--grey-14); }
+.input .val { flex: 1; color: var(--grey-14); font-family: var(--font-mono); font-size: var(--fs-300); }
+.input .caret { display: inline-block; width: 1px; height: 16px; background: var(--grey-14); vertical-align: -3px; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.login-pane .btn.primary { width: 100%; margin-top: 10px; }
+.login-pane .fine { margin-top: 16px; font-size: var(--fs-200); color: var(--muted-foreground); display: flex; align-items: center; gap: 6px; }
+
+/* Phone */
+.phones { display: flex; flex-wrap: wrap; gap: 32px; }
+.phone { width: 390px; max-width: 100%; height: 844px; border-radius: var(--radius-xl); border: 1px solid var(--grey-82); background: #fff; box-shadow: var(--shadow-28); overflow: hidden; display: flex; flex-direction: column; font-size: var(--fs-200); line-height: var(--lh-200); flex: none; }
+.p-status { height: 40px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; font-weight: 600; font-size: var(--fs-200); background: var(--grey-98); }
+.p-top { flex: none; height: 40px; display: flex; align-items: center; gap: 4px; padding: 0 4px 0 10px; background: var(--grey-98); border-bottom: 1px solid var(--border); }
+.p-top .ibtn { width: 40px; height: 40px; }
+.p-top .ibtn .ic { width: 20px; height: 20px; }
+.p-tabs { flex: none; height: 36px; display: flex; gap: 4px; padding: 4px 6px; overflow-x: auto; background: var(--grey-96); border-bottom: 1px solid var(--border); scrollbar-width: none; }
+.p-tab { flex: none; display: flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: var(--radius-xs); color: var(--grey-38); border: 1px solid transparent; white-space: nowrap; }
+.p-tab.active { background: #fff; color: var(--grey-14); border-color: var(--border); box-shadow: inset 0 -2px 0 var(--primary); font-weight: 600; }
+.phone .term pre { font-size: 11px; line-height: 15px; padding: 6px 8px; }
+.keybar { flex: none; display: flex; gap: 4px; padding: 6px 6px; background: var(--grey-94); border-top: 1px solid var(--grey-82); overflow-x: auto; scrollbar-width: none; }
+.key { flex: 1 0 auto; min-width: 38px; height: 44px; display: grid; place-items: center; padding: 0 6px; border: 1px solid var(--grey-82); border-bottom-width: 2px; border-radius: var(--radius-xs); background: #fff; font: 600 12px/1 var(--font-mono); color: var(--grey-14); }
+.key:active { background: var(--grey-92); border-bottom-width: 1px; }
+.key.mod { color: var(--brand-70); }
+.key.held { background: var(--brand-160); border-color: var(--brand-150); color: var(--brand-60); }
+.key .ic { width: 18px; height: 18px; }
+.osk { flex: none; height: 268px; background: #d3d6db; display: grid; grid-template-rows: repeat(4, 1fr); gap: 10px; padding: 10px 4px 34px; }
+.osk .row { display: flex; gap: 6px; justify-content: center; }
+.osk .row span { flex: 1; max-width: 34px; background: #fff; border-radius: 5px; box-shadow: 0 1px 0 #898a8d; display: grid; place-items: center; font: 400 18px/1 var(--font-sans); color: #000; }
+.osk .row span.w { max-width: 200px; flex: 5; font-size: 14px; color: #555; }
+.osk .row span.f { max-width: 48px; flex: 1.4; background: #abb0ba; font-size: 13px; }
+.phone-cap { font-size: var(--fs-200); color: var(--muted-foreground); margin-top: 8px; width: 390px; max-width: 100%; }
+
+@media (max-width: 640px) {
+  .spec { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main class="page">
+
+<header class="doc-head">
+  <h1>Roosterm · Mockup 1 — Dense Workbench</h1>
+  <p>Desktop-first, IDE-panel density: 88px of chrome on a 720px viewport, the rest is terminal. Fluent 2 visual language, Material 3 corner scale, light theme.</p>
+</header>
+
+<div class="spec">
+  <section>
+    <h2>Color tokens</h2>
+    <table>
+      <tr><td><span class="sw" style="background:#0f6cbd"></span>--primary (brand-80)</td><td>#0f6cbd</td></tr>
+      <tr><td><span class="sw" style="background:#115ea3"></span>--primary-hover (brand-70)</td><td>#115ea3</td></tr>
+      <tr><td><span class="sw" style="background:#ebf3fc"></span>--accent (brand-160)</td><td>#ebf3fc</td></tr>
+      <tr><td><span class="sw" style="background:#242424"></span>--foreground (grey-14)</td><td>#242424</td></tr>
+      <tr><td><span class="sw" style="background:#616161"></span>--muted-foreground (grey-38)</td><td>#616161</td></tr>
+      <tr><td><span class="sw" style="background:#f5f5f5"></span>--background (grey-96)</td><td>#f5f5f5</td></tr>
+      <tr><td><span class="sw" style="background:#ffffff"></span>--card / --term-bg</td><td>#ffffff</td></tr>
+      <tr><td><span class="sw" style="background:#e0e0e0"></span>--border (grey-88)</td><td>#e0e0e0</td></tr>
+      <tr><td><span class="sw" style="background:#0e700e"></span>success-fg (green shade10)</td><td>#0e700e</td></tr>
+      <tr><td><span class="sw" style="background:#bc4b09"></span>warning-fg (orange shade20)</td><td>#bc4b09</td></tr>
+      <tr><td><span class="sw" style="background:#b10e1c"></span>--destructive (cranberry s10)</td><td>#b10e1c</td></tr>
+    </table>
+  </section>
+  <section>
+    <h2>Radius — M3 shape scale</h2>
+    <table>
+      <tr><td><span class="rad" style="border-top-left-radius:0"></span>corner-none → terminal, bars</td><td>0px</td></tr>
+      <tr><td><span class="rad" style="border-top-left-radius:4px"></span>corner-extra-small → tabs, buttons, inputs, keys</td><td>4px</td></tr>
+      <tr><td><span class="rad" style="border-top-left-radius:8px"></span>corner-small → app frame, banners, list, options</td><td>8px</td></tr>
+      <tr><td><span class="rad" style="border-top-left-radius:12px"></span>corner-medium → dialog, spec cards</td><td>12px</td></tr>
+      <tr><td><span class="rad" style="border-top-left-radius:16px"></span>corner-large → (reserved: sheets)</td><td>16px</td></tr>
+      <tr><td><span class="rad" style="border-top-left-radius:14px"></span>corner-extra-large → phone frame only</td><td>28px</td></tr>
+      <tr><td><span class="rad" style="border-top-left-radius:14px;border-radius:8px 0 0 0"></span>corner-full → status pills, avatar</td><td>9999px</td></tr>
+    </table>
+  </section>
+  <section>
+    <h2>Type scale — Fluent 2</h2>
+    <table>
+      <tr><td style="font-size:10px">caption2 · status bar, badges</td><td>10/14</td></tr>
+      <tr><td style="font-size:12px">caption1 · chrome default (tabs, menus)</td><td>12/16</td></tr>
+      <tr><td style="font-size:14px">body1 · dialogs, forms</td><td>14/20</td></tr>
+      <tr><td style="font-size:16px;font-weight:600">subtitle2 · section heads</td><td>16/22</td></tr>
+      <tr><td style="font-size:20px;font-weight:600">subtitle1 · dialog title</td><td>20/28</td></tr>
+      <tr><td style="font-size:24px;font-weight:600">title3 · login</td><td>24/32</td></tr>
+      <tr><td style="font-family:var(--font-mono);font-size:13px">terminal cell (mono)</td><td>13/18</td></tr>
+    </table>
+    <p style="margin:10px 0 0;font-size:12px;color:var(--muted-foreground)">Sans: Segoe UI → system. Mono: Cascadia Mono → Consolas → SF Mono → Menlo. Motion: 150/200ms, curveEasyEase. Elevation: Fluent shadow4/16/64.</p>
+  </section>
+  <section>
+    <h2>Trade-offs of this direction</h2>
+    <ul>
+      <li><b>+ Max terminal area:</b> 32px title + 34px tabs + 22px status = 88px chrome; at 1280×720 that is ~160×34 cells at 13px. <b>−</b> 12px chrome text and 24px icon buttons are below touch size, so phone needs a separate layout (screen 4), i.e. two chrome variants to maintain.</li>
+      <li><b>+ Familiar to power users:</b> flat IDE tabs, status bar with latency/size/encoding, keyboard hints. <b>−</b> Feels utilitarian; less approachable for a first-time or mobile-first user.</li>
+      <li><b>+ Status is ambient, not modal:</b> disconnects and exits render as a thin bar/strip that never covers output. <b>−</b> Thin bars are easy to miss on a large monitor; relies on tab badges and status-bar color as a second signal.</li>
+    </ul>
+  </section>
+</div>
+
+<!-- ========================= 1. LOGIN ========================= -->
+<section class="screen">
+  <div class="screen-label"><span class="n">01</span><h2>Login</h2><span class="note">desktop 1280×640 · username + password</span></div>
+  <div class="scroller">
+  <div class="login-stage">
+    <div class="login-art" aria-hidden="true">
+<pre><span class="d">Last login: Tue Nov 18 22:41:07 on ttys004</span>
+<span class="g">jhangyu@devbox</span> <span class="b">~/project/roosterm</span> <span class="d">(main)</span>
+<span class="B">$</span> roosterm serve --bind 0.0.0.0:7681
+<span class="d">2026-11-19T09:12:03Z</span>  <span class="g">INFO</span>  listening on 0.0.0.0:7681
+<span class="d">2026-11-19T09:12:03Z</span>  <span class="g">INFO</span>  pty backend: tmux 3.5a
+<span class="d">2026-11-19T09:12:03Z</span>  <span class="g">INFO</span>  swarm sockets: 2 found
+<span class="d">2026-11-19T09:12:03Z</span>  <span class="g">INFO</span>  auth: password (argon2id)
+<span class="d">2026-11-19T09:12:41Z</span>  <span class="y">WARN</span>  waiting for sign-in…
+<span class="cur"> </span></pre>
+      <div class="cap"><svg class="ic" data-icon="fluent2/regular-20/server" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M7.5 5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM7 12.5c0-.28.22-.5.5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m.5 1.5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM5 4.5A2.5 2.5 0 0 1 7.5 2h5A2.5 2.5 0 0 1 15 4.5v11a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 5 15.5zM7.5 3C6.67 3 6 3.67 6 4.5v11c0 .83.67 1.5 1.5 1.5h5c.83 0 1.5-.67 1.5-1.5v-11c0-.83-.67-1.5-1.5-1.5z"/></svg> devbox.local · 7681 · TLS</div>
+    </div>
+    <div class="login-pane">
+      <div class="brandmark"><i>&gt;_</i>roosterm</div>
+      <h3>Sign in</h3>
+      <p>Connect to the terminal host <b style="color:var(--grey-14);font-weight:600">devbox.local</b>.</p>
+      <div class="field">
+        <label for="u">Username</label>
+        <div class="input"><svg class="ic" data-icon="fluent2/regular-20/person" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8M7 6a3 3 0 1 1 6 0 3 3 0 0 1-6 0m-2 5a2 2 0 0 0-2 2c0 1.7.83 2.97 2.13 3.8A9 9 0 0 0 10 18c1.85 0 3.58-.39 4.87-1.2A4.4 4.4 0 0 0 17 13a2 2 0 0 0-2-2zm-1 2a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1c0 1.3-.62 2.28-1.67 2.95A8 8 0 0 1 10 17a8 8 0 0 1-4.33-1.05A3.4 3.4 0 0 1 4 13"/></svg><span class="val">jhangyu</span></div>
+      </div>
+      <div class="field">
+        <label for="p">Password</label>
+        <div class="input focus"><svg class="ic" data-icon="fluent2/regular-20/lock_closed" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 1a4 4 0 0 1 4 4v2.05a2.5 2.5 0 0 1 2 2.45v6a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 15.5v-6c0-1.2.86-2.22 2-2.45V5a4 4 0 0 1 4-4M6.5 8C5.67 8 5 8.67 5 9.5v6c0 .83.67 1.5 1.5 1.5h7c.83 0 1.5-.67 1.5-1.5v-6c0-.83-.67-1.5-1.5-1.5zm3.5 3.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2M10 2a3 3 0 0 0-3 3v2h6V5a3 3 0 0 0-3-3"/></svg><span class="val">•••••••••••<span class="caret"></span></span><button class="ibtn" aria-label="Show password"><svg class="ic" data-icon="fluent2/regular-20/eye" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M3.26 11.6A7 7 0 0 1 10 6c3.2 0 6.06 2.33 6.74 5.6a.5.5 0 0 0 .98-.2A8 8 0 0 0 10 5a8 8 0 0 0-7.72 6.4.5.5 0 0 0 .98.2M10 8a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7m-2.5 3.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0"/></svg></button></div>
+      </div>
+      <button class="btn primary">Sign in</button>
+      <div class="fine"><svg class="ic" data-icon="fluent2/regular-20/lock_closed" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 1a4 4 0 0 1 4 4v2.05a2.5 2.5 0 0 1 2 2.45v6a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 15.5v-6c0-1.2.86-2.22 2-2.45V5a4 4 0 0 1 4-4M6.5 8C5.67 8 5 8.67 5 9.5v6c0 .83.67 1.5 1.5 1.5h7c.83 0 1.5-.67 1.5-1.5v-6c0-.83-.67-1.5-1.5-1.5zm3.5 3.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2M10 2a3 3 0 0 0-3 3v2h6V5a3 3 0 0 0-3-3"/></svg> Session stays on this device for 7 days.</div>
+    </div>
+  </div>
+  </div>
+</section>
+
+<!-- ========================= 2. DESKTOP MAIN ========================= -->
+<section class="screen">
+  <div class="screen-label"><span class="n">02</span><h2>Desktop main view</h2><span class="note">1280×720 · 3 tabs: shell, Claude Code (active, busy), swarm watch</span></div>
+  <div class="scroller">
+  <div class="app">
+    <div class="titlebar">
+      <div class="brandmark"><i>&gt;_</i>roosterm</div>
+      <div class="crumb"><span class="sep">/</span><svg class="ic" data-icon="fluent2/regular-20/server" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M7.5 5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM7 12.5c0-.28.22-.5.5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m.5 1.5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM5 4.5A2.5 2.5 0 0 1 7.5 2h5A2.5 2.5 0 0 1 15 4.5v11a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 5 15.5zM7.5 3C6.67 3 6 3.67 6 4.5v11c0 .83.67 1.5 1.5 1.5h5c.83 0 1.5-.67 1.5-1.5v-11c0-.83-.67-1.5-1.5-1.5z"/></svg>jhangyu@devbox.local</div>
+      <div class="spacer"></div>
+      <span class="pill ok"><span class="dot"></span>Connected · 18 ms</span>
+      <button class="ibtn" aria-label="Search"><svg class="ic" data-icon="fluent2/regular-20/search" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M13.73 14.44a6.5 6.5 0 1 1 .7-.7l3.42 3.4a.5.5 0 0 1-.63.77l-.07-.06zm-.71-.71A5.5 5.5 0 0 0 15 9.5a5.5 5.5 0 1 0-1.98 4.23"/></svg></button>
+      <button class="ibtn" aria-label="Settings"><svg class="ic" data-icon="fluent2/regular-20/settings" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M1.91 7.38A8.5 8.5 0 0 1 3.7 4.3a.5.5 0 0 1 .54-.13l1.92.68a1 1 0 0 0 1.32-.76l.36-2a.5.5 0 0 1 .4-.4 9 9 0 0 1 3.55 0q.32.08.38.4l.37 2a1 1 0 0 0 1.32.76l1.92-.68a.5.5 0 0 1 .54.13 8.5 8.5 0 0 1 1.78 3.08q.08.31-.15.54l-1.56 1.32a1 1 0 0 0 0 1.52l1.56 1.32a.5.5 0 0 1 .15.54 8.5 8.5 0 0 1-1.78 3.08.5.5 0 0 1-.54.13l-1.92-.68a1 1 0 0 0-1.32.76l-.37 2a.5.5 0 0 1-.38.4 8.5 8.5 0 0 1-3.56 0 .5.5 0 0 1-.39-.4l-.36-2a1 1 0 0 0-1.32-.76l-1.92.68a.5.5 0 0 1-.54-.13 8.5 8.5 0 0 1-1.78-3.08.5.5 0 0 1 .15-.54l1.56-1.32a1 1 0 0 0 0-1.52L2.06 7.92a.5.5 0 0 1-.15-.54m1.06 0 1.3 1.1a2 2 0 0 1 0 3.04l-1.3 1.1q.45 1.19 1.25 2.16l1.6-.58a2 2 0 0 1 2.63 1.53l.3 1.67a8 8 0 0 0 2.5 0l.3-1.67a2 2 0 0 1 2.64-1.53l1.6.58a8 8 0 0 0 1.24-2.16l-1.3-1.1a2 2 0 0 1 0-3.04l1.3-1.1a8 8 0 0 0-1.25-2.16l-1.6.58a2 2 0 0 1-2.63-1.53l-.3-1.67a8 8 0 0 0-2.5 0l-.3 1.67A2 2 0 0 1 5.81 5.8l-1.6-.58a8 8 0 0 0-1.24 2.16M7.5 10a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0m1 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0"/></svg></button>
+      <span class="avatar" title="jhangyu">JY</span>
+    </div>
+    <div class="tabbar" role="tablist">
+      <div class="tab" role="tab"><svg class="ic" data-icon="fluent2/regular-20/window_console" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M5.65 9.15c.2-.2.5-.2.7 0l2 2a.5.5 0 0 1 0 .7l-2 2a.5.5 0 0 1-.7-.7l1.64-1.65-1.64-1.65a.5.5 0 0 1 0-.7M14.5 13h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1M3 5.5A2.5 2.5 0 0 1 5.5 3h9A2.5 2.5 0 0 1 17 5.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 14.5zM16 6v-.5c0-.83-.68-1.5-1.5-1.5h-9C4.67 4 4 4.67 4 5.5V6zM4 7v7.5c0 .83.67 1.5 1.5 1.5h9c.82 0 1.5-.67 1.5-1.5V7z"/></svg><span class="t">zsh<small>~/project/roosterm</small></span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <div class="tab active" role="tab" aria-selected="true"><svg class="ic" data-icon="fluent2/regular-20/bot" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M12 5.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-5 1a1 1 0 1 1 2 0 1 1 0 0 1-2 0m3.5-4a.5.5 0 0 0-1 0V3h-3C5.67 3 5 3.67 5 4.5v4c0 .83.67 1.5 1.5 1.5h7c.83 0 1.5-.67 1.5-1.5v-4c0-.83-.67-1.5-1.5-1.5h-3zM6.5 4h7c.28 0 .5.22.5.5v4a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-4c0-.28.22-.5.5-.5m3.75 14c2.62-.04 4.2-.6 5.12-1.44A3.5 3.5 0 0 0 16.5 14h.01v-.69c0-1-.81-1.8-1.8-1.8h-3.2v-.01H5.3c-.99 0-1.8.81-1.8 1.81v.7c.04.77.25 1.75 1.13 2.55.93.84 2.5 1.4 5.12 1.44zm-4.94-5.5h9.38c.45 0 .81.37.81.81v.44c0 .69-.13 1.46-.8 2.07C14 16.45 12.66 17 10 17s-4.01-.55-4.7-1.18a2.6 2.6 0 0 1-.8-2.07v-.44c0-.44.36-.8.8-.8"/></svg><span class="t">claude<small>roosterm</small></span><span class="busy" title="Working"></span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <div class="tab" role="tab"><svg class="ic" data-icon="fluent2/regular-20/people_team" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M7.5 4.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0m8-.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0m-10 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0m1-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m.6 12H5a2 2 0 0 1-2-2V9.25c0-.14.11-.25.25-.25h1.76q.06-.55.37-1H3.25C2.56 8 2 8.56 2 9.25V13a3 3 0 0 0 3.4 2.97 5 5 0 0 1-.3-.97m9.5.97q.2.03.4.03a3 3 0 0 0 3-3V9.25C18 8.56 17.44 8 16.75 8h-2.13q.3.45.37 1h1.76q.23.02.25.25V13a2 2 0 0 1-2.1 2q-.1.5-.3.97M7.25 8C6.56 8 6 8.56 6 9.25V14a4 4 0 0 0 8 0V9.25C14 8.56 13.44 8 12.75 8zM7 9.25c0-.14.11-.25.25-.25h5.5q.23.02.25.25V14a3 3 0 1 1-6 0z"/></svg><span class="t">swarm-12345<small>watch</small></span><span class="badge live">LIVE</span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <button class="newtab" aria-label="New tab"><svg class="ic" data-icon="fluent2/regular-20/add" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2.5c.28 0 .5.22.5.5v6.5H17a.5.5 0 0 1 0 1h-6.5V17a.5.5 0 0 1-1 0v-6.5H3a.5.5 0 0 1 0-1h6.5V3c0-.28.22-.5.5-.5"/></svg><kbd>⌃⇧T</kbd></button>
+      <div class="tools">
+        <button class="ibtn" aria-label="Split"><svg class="ic" data-icon="fluent2/regular-20/split_vertical" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2.5a.5.5 0 0 0-1 0v15a.5.5 0 0 0 1 0zM4 4a2 2 0 0 0-2 2v8c0 1.1.9 2 2 2h4v-1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4V4zm7 0v1h4a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-4v1h4a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/></svg></button>
+        <button class="ibtn" aria-label="More"><svg class="ic" data-icon="fluent2/regular-20/more_horizontal" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M6.25 10a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0m5 0a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0M15 11.25a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5"/></svg></button>
+      </div>
+    </div>
+    <div class="term">
+<pre><span class="o">╭───────────────────────────────────────────────────╮</span>
+<span class="o">│</span> <span class="o">✻</span> Welcome to <span class="B">Claude Code</span>!                         <span class="o">│</span>
+<span class="o">│</span>   <span class="d">/help for help, /status for your current setup</span>  <span class="o">│</span>
+<span class="o">│</span>                                                   <span class="o">│</span>
+<span class="o">│</span>   <span class="d">cwd: /Users/jhangyu/project/roosterm</span>            <span class="o">│</span>
+<span class="o">╰───────────────────────────────────────────────────╯</span>
+
+<span class="d">&gt;</span> make the session registry evict exited PTYs and push a tab-exit event to the client
+
+<span class="g">●</span> <span class="B">Read</span>(src/session/registry.rs)
+  <span class="d">⎿  Read 214 lines</span>
+
+<span class="g">●</span> <span class="B">Update</span>(src/session/registry.rs)
+  <span class="d">⎿  Updated</span> src/session/registry.rs <span class="d">with</span> <span class="g">9 additions</span> <span class="d">and</span> <span class="r">2 removals</span>
+     <span class="d">118</span>       pub fn reap(&amp;mut self, id: SessionId, status: ExitStatus) {
+     <span class="d">119</span>  <span class="del"><span class="r">-</span>        self.sessions.get_mut(&amp;id).map(|s| s.mark_dead());</span>
+     <span class="d">120</span>  <span class="del"><span class="r">-</span>        // TODO: notify</span>
+     <span class="d">119</span>  <span class="add"><span class="g">+</span>        let session = self.sessions.remove(&amp;id)</span>
+     <span class="d">120</span>  <span class="add"><span class="g">+</span>            .ok_or(RegistryError::UnknownSession { id })?;</span>
+     <span class="d">121</span>  <span class="add"><span class="g">+</span>        self.events.send(ServerEvent::TabExited {</span>
+     <span class="d">122</span>  <span class="add"><span class="g">+</span>            tab: session.tab_id,</span>
+     <span class="d">123</span>  <span class="add"><span class="g">+</span>            code: status.code(),</span>
+     <span class="d">124</span>  <span class="add"><span class="g">+</span>        })?;</span>
+     <span class="d">125</span>       }
+
+<span class="g">●</span> <span class="B">Bash</span>(cargo test -p roosterm-server session::)
+  <span class="d">⎿  Running…</span>
+
+<span class="o">✻ Reticulating…</span> <span class="d">(38s · ↓ 2.4k tokens · esc to interrupt)</span>
+
+<span class="d">╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮</span>
+<span class="d">│</span> &gt; <span class="cur"> </span>                                                                                                                          <span class="d">│</span>
+<span class="d">╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯</span>
+  <span class="d">? for shortcuts</span>                                                                         <span class="d">⏵⏵ accept edits on (shift+tab to cycle)</span></pre>
+      <div class="gutter"></div>
+    </div>
+    <div class="statusbar">
+      <span class="si ok"><svg class="ic" data-icon="fluent2/regular-20/checkmark_circle" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16m0 1a7 7 0 1 0 0 14 7 7 0 0 0 0-14m3.36 4.65c.17.17.2.44.06.63l-.06.07-4 4a.5.5 0 0 1-.64.07l-.07-.06-2-2a.5.5 0 0 1 .63-.77l.07.06L9 11.3l3.65-3.65c.2-.2.51-.2.7 0"/></svg>Connected</span>
+      <span class="si">tmux · claude</span>
+      <span class="si">PID 48211</span>
+      <span class="push si">160×34</span>
+      <span class="si">UTF-8</span>
+      <span class="si">xterm-256color</span>
+      <span class="si"><svg class="ic" data-icon="fluent2/regular-20/keyboard" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M5 12.5c0-.28.22-.5.5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5M11.5 8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5m3.75-.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0M5.5 8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5m2.25 1.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0m2.25.75A.75.75 0 1 0 10 9a.75.75 0 0 0 0 1.5m3.76-.75a.75.75 0 1 1-1.5 0 .75.75 0 0 1 1.5 0M8.5 8a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5M2 5.5C2 4.67 2.67 4 3.5 4h13c.83 0 1.5.67 1.5 1.5v8c0 .83-.67 1.5-1.5 1.5h-13A1.5 1.5 0 0 1 2 13.5zM3.5 5a.5.5 0 0 0-.5.5v8c0 .28.22.5.5.5h13a.5.5 0 0 0 .5-.5v-8a.5.5 0 0 0-.5-.5z"/></svg>⌃⇧T new · ⌃⇧W close</span>
+    </div>
+  </div>
+  </div>
+</section>
+
+<!-- ========================= 3. NEW TAB DIALOG ========================= -->
+<section class="screen">
+  <div class="screen-label"><span class="n">03</span><h2>New-tab dialog</h2><span class="note">"Watch swarm" selected · 2 sockets found on host</span></div>
+  <div class="scroller">
+  <div class="app short">
+    <div class="titlebar">
+      <div class="brandmark"><i>&gt;_</i>roosterm</div>
+      <div class="crumb"><span class="sep">/</span><svg class="ic" data-icon="fluent2/regular-20/server" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M7.5 5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM7 12.5c0-.28.22-.5.5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m.5 1.5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM5 4.5A2.5 2.5 0 0 1 7.5 2h5A2.5 2.5 0 0 1 15 4.5v11a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 5 15.5zM7.5 3C6.67 3 6 3.67 6 4.5v11c0 .83.67 1.5 1.5 1.5h5c.83 0 1.5-.67 1.5-1.5v-11c0-.83-.67-1.5-1.5-1.5z"/></svg>jhangyu@devbox.local</div>
+      <div class="spacer"></div>
+      <span class="pill ok"><span class="dot"></span>Connected · 18 ms</span>
+      <span class="avatar">JY</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab"><svg class="ic" data-icon="fluent2/regular-20/window_console" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M5.65 9.15c.2-.2.5-.2.7 0l2 2a.5.5 0 0 1 0 .7l-2 2a.5.5 0 0 1-.7-.7l1.64-1.65-1.64-1.65a.5.5 0 0 1 0-.7M14.5 13h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1M3 5.5A2.5 2.5 0 0 1 5.5 3h9A2.5 2.5 0 0 1 17 5.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 14.5zM16 6v-.5c0-.83-.68-1.5-1.5-1.5h-9C4.67 4 4 4.67 4 5.5V6zM4 7v7.5c0 .83.67 1.5 1.5 1.5h9c.82 0 1.5-.67 1.5-1.5V7z"/></svg><span class="t">zsh</span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <div class="tab active"><svg class="ic" data-icon="fluent2/regular-20/bot" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M12 5.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-5 1a1 1 0 1 1 2 0 1 1 0 0 1-2 0m3.5-4a.5.5 0 0 0-1 0V3h-3C5.67 3 5 3.67 5 4.5v4c0 .83.67 1.5 1.5 1.5h7c.83 0 1.5-.67 1.5-1.5v-4c0-.83-.67-1.5-1.5-1.5h-3zM6.5 4h7c.28 0 .5.22.5.5v4a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-4c0-.28.22-.5.5-.5m3.75 14c2.62-.04 4.2-.6 5.12-1.44A3.5 3.5 0 0 0 16.5 14h.01v-.69c0-1-.81-1.8-1.8-1.8h-3.2v-.01H5.3c-.99 0-1.8.81-1.8 1.81v.7c.04.77.25 1.75 1.13 2.55.93.84 2.5 1.4 5.12 1.44zm-4.94-5.5h9.38c.45 0 .81.37.81.81v.44c0 .69-.13 1.46-.8 2.07C14 16.45 12.66 17 10 17s-4.01-.55-4.7-1.18a2.6 2.6 0 0 1-.8-2.07v-.44c0-.44.36-.8.8-.8"/></svg><span class="t">claude</span><span class="busy"></span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <div class="tab"><svg class="ic" data-icon="fluent2/regular-20/people_team" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M7.5 4.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0m8-.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0m-10 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0m1-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m.6 12H5a2 2 0 0 1-2-2V9.25c0-.14.11-.25.25-.25h1.76q.06-.55.37-1H3.25C2.56 8 2 8.56 2 9.25V13a3 3 0 0 0 3.4 2.97 5 5 0 0 1-.3-.97m9.5.97q.2.03.4.03a3 3 0 0 0 3-3V9.25C18 8.56 17.44 8 16.75 8h-2.13q.3.45.37 1h1.76q.23.02.25.25V13a2 2 0 0 1-2.1 2q-.1.5-.3.97M7.25 8C6.56 8 6 8.56 6 9.25V14a4 4 0 0 0 8 0V9.25C14 8.56 13.44 8 12.75 8zM7 9.25c0-.14.11-.25.25-.25h5.5q.23.02.25.25V14a3 3 0 1 1-6 0z"/></svg><span class="t">swarm-12345</span><span class="badge live">LIVE</span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <button class="newtab" aria-label="New tab" style="background:var(--grey-88)"><svg class="ic" data-icon="fluent2/regular-20/add" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2.5c.28 0 .5.22.5.5v6.5H17a.5.5 0 0 1 0 1h-6.5V17a.5.5 0 0 1-1 0v-6.5H3a.5.5 0 0 1 0-1h6.5V3c0-.28.22-.5.5-.5"/></svg><kbd>⌃⇧T</kbd></button>
+    </div>
+    <div class="term"><pre><span class="g">●</span> <span class="B">Bash</span>(cargo test -p roosterm-server session::)
+  <span class="d">⎿  test session::registry::reap_removes_and_notifies ... ok</span>
+<span class="d">     test result: ok. 14 passed; 0 failed; finished in 0.41s</span></pre>
+      <div class="scrim">
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="nt-title">
+          <h3 id="nt-title">New tab <button class="ibtn" aria-label="Close dialog"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></h3>
+          <p class="sub">Open a login shell on devbox.local, or attach read-only to a running Claude swarm.</p>
+          <div class="seg" role="radiogroup">
+            <button class="opt" role="radio" aria-checked="false"><svg class="ic" data-icon="fluent2/regular-20/window_console" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M5.65 9.15c.2-.2.5-.2.7 0l2 2a.5.5 0 0 1 0 .7l-2 2a.5.5 0 0 1-.7-.7l1.64-1.65-1.64-1.65a.5.5 0 0 1 0-.7M14.5 13h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1M3 5.5A2.5 2.5 0 0 1 5.5 3h9A2.5 2.5 0 0 1 17 5.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 14.5zM16 6v-.5c0-.83-.68-1.5-1.5-1.5h-9C4.67 4 4 4.67 4 5.5V6zM4 7v7.5c0 .83.67 1.5 1.5 1.5h9c.82 0 1.5-.67 1.5-1.5V7z"/></svg><span><b>Shell</b><small>zsh · starts in ~</small></span></button>
+            <button class="opt on" role="radio" aria-checked="true"><svg class="ic" data-icon="fluent2/regular-20/people_team" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M7.5 4.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0m8-.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0m-10 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0m1-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m.6 12H5a2 2 0 0 1-2-2V9.25c0-.14.11-.25.25-.25h1.76q.06-.55.37-1H3.25C2.56 8 2 8.56 2 9.25V13a3 3 0 0 0 3.4 2.97 5 5 0 0 1-.3-.97m9.5.97q.2.03.4.03a3 3 0 0 0 3-3V9.25C18 8.56 17.44 8 16.75 8h-2.13q.3.45.37 1h1.76q.23.02.25.25V13a2 2 0 0 1-2.1 2q-.1.5-.3.97M7.25 8C6.56 8 6 8.56 6 9.25V14a4 4 0 0 0 8 0V9.25C14 8.56 13.44 8 12.75 8zM7 9.25c0-.14.11-.25.25-.25h5.5q.23.02.25.25V14a3 3 0 1 1-6 0z"/></svg><span><b>Watch swarm</b><small>Mirror a tmux swarm socket</small></span></button>
+          </div>
+          <div class="fieldlabel">Swarm socket <span>2 found · /tmp/tmux-501</span></div>
+          <div class="socklist" role="radiogroup">
+            <div class="sock on" role="radio" aria-checked="true"><span class="radio"></span><span><code>claude-swarm-12345</code><small>4 panes · lead + 3 members · started 09:02</small></span><span class="pill ok"><span class="dot"></span>active</span></div>
+            <div class="sock" role="radio" aria-checked="false"><span class="radio"></span><span><code>claude-swarm-48210</code><small>2 panes · lead + 1 member · started yesterday 22:15</small></span><span class="pill neutral"><span class="dot"></span>idle</span></div>
+          </div>
+          <div class="foot">
+            <button class="btn">Cancel</button>
+            <button class="btn primary"><svg class="ic" data-icon="fluent2/regular-20/eye" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M3.26 11.6A7 7 0 0 1 10 6c3.2 0 6.06 2.33 6.74 5.6a.5.5 0 0 0 .98-.2A8 8 0 0 0 10 5a8 8 0 0 0-7.72 6.4.5.5 0 0 0 .98.2M10 8a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7m-2.5 3.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0"/></svg>Watch</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar"><span class="si ok"><svg class="ic" data-icon="fluent2/regular-20/checkmark_circle" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16m0 1a7 7 0 1 0 0 14 7 7 0 0 0 0-14m3.36 4.65c.17.17.2.44.06.63l-.06.07-4 4a.5.5 0 0 1-.64.07l-.07-.06-2-2a.5.5 0 0 1 .63-.77l.07.06L9 11.3l3.65-3.65c.2-.2.51-.2.7 0"/></svg>Connected</span><span class="push si">160×34</span><span class="si">UTF-8</span></div>
+  </div>
+  </div>
+</section>
+
+<!-- ========================= 4. PHONE ========================= -->
+<section class="screen">
+  <div class="screen-label"><span class="n">04</span><h2>Phone main view</h2><span class="note">390×844 Android WebView · special-key bar above the system keyboard</span></div>
+  <div class="phones">
+  <div>
+  <div class="phone">
+    <div class="p-status"><span>9:41</span><span style="font-weight:400;color:var(--grey-38)">5G · 82%</span></div>
+    <div class="p-top">
+      <div class="brandmark"><i>&gt;_</i>roosterm</div>
+      <span class="pill ok" style="margin-left:6px"><span class="dot"></span>18 ms</span>
+      <div class="spacer"></div>
+      <button class="ibtn" aria-label="New tab"><svg class="ic" data-icon="fluent2/regular-20/add" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2.5c.28 0 .5.22.5.5v6.5H17a.5.5 0 0 1 0 1h-6.5V17a.5.5 0 0 1-1 0v-6.5H3a.5.5 0 0 1 0-1h6.5V3c0-.28.22-.5.5-.5"/></svg></button>
+      <button class="ibtn" aria-label="More"><svg class="ic" data-icon="fluent2/regular-20/more_horizontal" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M6.25 10a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0m5 0a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0M15 11.25a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5"/></svg></button>
+    </div>
+    <div class="p-tabs" role="tablist">
+      <div class="p-tab"><svg class="ic" data-icon="fluent2/regular-20/window_console" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M5.65 9.15c.2-.2.5-.2.7 0l2 2a.5.5 0 0 1 0 .7l-2 2a.5.5 0 0 1-.7-.7l1.64-1.65-1.64-1.65a.5.5 0 0 1 0-.7M14.5 13h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1M3 5.5A2.5 2.5 0 0 1 5.5 3h9A2.5 2.5 0 0 1 17 5.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 14.5zM16 6v-.5c0-.83-.68-1.5-1.5-1.5h-9C4.67 4 4 4.67 4 5.5V6zM4 7v7.5c0 .83.67 1.5 1.5 1.5h9c.82 0 1.5-.67 1.5-1.5V7z"/></svg>zsh</div>
+      <div class="p-tab active"><svg class="ic" data-icon="fluent2/regular-20/bot" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M12 5.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-5 1a1 1 0 1 1 2 0 1 1 0 0 1-2 0m3.5-4a.5.5 0 0 0-1 0V3h-3C5.67 3 5 3.67 5 4.5v4c0 .83.67 1.5 1.5 1.5h7c.83 0 1.5-.67 1.5-1.5v-4c0-.83-.67-1.5-1.5-1.5h-3zM6.5 4h7c.28 0 .5.22.5.5v4a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-4c0-.28.22-.5.5-.5m3.75 14c2.62-.04 4.2-.6 5.12-1.44A3.5 3.5 0 0 0 16.5 14h.01v-.69c0-1-.81-1.8-1.8-1.8h-3.2v-.01H5.3c-.99 0-1.8.81-1.8 1.81v.7c.04.77.25 1.75 1.13 2.55.93.84 2.5 1.4 5.12 1.44zm-4.94-5.5h9.38c.45 0 .81.37.81.81v.44c0 .69-.13 1.46-.8 2.07C14 16.45 12.66 17 10 17s-4.01-.55-4.7-1.18a2.6 2.6 0 0 1-.8-2.07v-.44c0-.44.36-.8.8-.8"/></svg>claude<span class="busy" style="width:6px;height:6px;border-radius:50%;background:var(--ansi-orange)"></span></div>
+      <div class="p-tab"><svg class="ic" data-icon="fluent2/regular-20/people_team" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M7.5 4.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0m8-.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0m-10 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0m1-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m.6 12H5a2 2 0 0 1-2-2V9.25c0-.14.11-.25.25-.25h1.76q.06-.55.37-1H3.25C2.56 8 2 8.56 2 9.25V13a3 3 0 0 0 3.4 2.97 5 5 0 0 1-.3-.97m9.5.97q.2.03.4.03a3 3 0 0 0 3-3V9.25C18 8.56 17.44 8 16.75 8h-2.13q.3.45.37 1h1.76q.23.02.25.25V13a2 2 0 0 1-2.1 2q-.1.5-.3.97M7.25 8C6.56 8 6 8.56 6 9.25V14a4 4 0 0 0 8 0V9.25C14 8.56 13.44 8 12.75 8zM7 9.25c0-.14.11-.25.25-.25h5.5q.23.02.25.25V14a3 3 0 1 1-6 0z"/></svg>swarm-12345</div>
+    </div>
+    <div class="term"><pre><span class="g">●</span> <span class="B">Update</span>(src/session/registry.rs)
+  <span class="d">⎿ Updated with</span> <span class="g">9 add</span><span class="d">,</span> <span class="r">2 del</span>
+  <span class="d">119</span> <span class="del"><span class="r">-</span> self.sessions.get_mut(&amp;id)</span>
+  <span class="d">119</span> <span class="add"><span class="g">+</span> let session = self.sessions</span>
+  <span class="d">120</span> <span class="add"><span class="g">+</span>   .remove(&amp;id)</span>
+  <span class="d">121</span> <span class="add"><span class="g">+</span>   .ok_or(UnknownSession{id})?;</span>
+  <span class="d">122</span> <span class="add"><span class="g">+</span> self.events.send(</span>
+  <span class="d">123</span> <span class="add"><span class="g">+</span>   ServerEvent::TabExited{..})?;</span>
+
+<span class="g">●</span> <span class="B">Bash</span>(cargo test -p roosterm-server)
+  <span class="d">⎿ 14 passed; 0 failed (0.41s)</span>
+
+<span class="g">●</span> Registry now evicts exited PTYs and
+  emits <span class="b">TabExited</span>. Want me to wire the
+  client banner next?
+
+<span class="d">╭────────────────────────────────────╮</span>
+<span class="d">│</span> &gt; yes, use the exit strip design<span class="cur"> </span>  <span class="d">│</span>
+<span class="d">╰────────────────────────────────────╯</span>
+  <span class="d">⏵⏵ accept edits on (shift+tab)</span></pre></div>
+    <div class="keybar" role="toolbar" aria-label="Special keys">
+      <button class="key">Esc</button>
+      <button class="key">Tab</button>
+      <button class="key mod">⇧Tab</button>
+      <button class="key mod held" aria-pressed="true">^C</button>
+      <button class="key mod">^D</button>
+      <button class="key" aria-label="Left"><svg class="ic" data-icon="fluent2/regular-20/arrow_left" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M9.16 16.87a.5.5 0 1 0 .67-.74L3.67 10.5H17.5a.5.5 0 0 0 0-1H3.67l6.16-5.63a.5.5 0 0 0-.67-.74L2.24 9.44a.75.75 0 0 0 0 1.11z"/></svg></button>
+      <button class="key" aria-label="Up"><svg class="ic" data-icon="fluent2/regular-20/arrow_up" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M3.13 9.16a.5.5 0 1 0 .74.68L9.5 3.67V17.5a.5.5 0 1 0 1 0V3.67l5.63 6.17a.5.5 0 0 0 .74-.68l-6.32-6.92a.75.75 0 0 0-1.1 0z"/></svg></button>
+      <button class="key" aria-label="Down"><svg class="ic" data-icon="fluent2/regular-20/arrow_down" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M16.87 10.84a.5.5 0 1 0-.74-.68l-5.63 6.17V2.5a.5.5 0 0 0-1 0v13.83l-5.63-6.17a.5.5 0 0 0-.74.68l6.31 6.91a.75.75 0 0 0 1.11 0z"/></svg></button>
+      <button class="key" aria-label="Right"><svg class="ic" data-icon="fluent2/regular-20/arrow_right" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10.84 3.13a.5.5 0 0 0-.68.74l6.17 5.63H2.5a.5.5 0 0 0 0 1h13.83l-6.17 5.63a.5.5 0 0 0 .68.74l6.91-6.32a.75.75 0 0 0 0-1.1z"/></svg></button>
+    </div>
+    <div class="osk" aria-label="System keyboard (placeholder)">
+      <div class="row"><span>q</span><span>w</span><span>e</span><span>r</span><span>t</span><span>y</span><span>u</span><span>i</span><span>o</span><span>p</span></div>
+      <div class="row"><span>a</span><span>s</span><span>d</span><span>f</span><span>g</span><span>h</span><span>j</span><span>k</span><span>l</span></div>
+      <div class="row"><span class="f">⇧</span><span>z</span><span>x</span><span>c</span><span>v</span><span>b</span><span>n</span><span>m</span><span class="f">⌫</span></div>
+      <div class="row"><span class="f">?123</span><span class="f">,</span><span class="w">space</span><span class="f">.</span><span class="f">⏎</span></div>
+    </div>
+  </div>
+  <p class="phone-cap">Chrome collapses to 40px top bar + 36px chip tabs. Key bar keys are 44px tall (touch minimum); <b>^C</b> shown in its pressed state. Terminal drops to 11/15px mono ≈ 56 columns.</p>
+  </div>
+  </div>
+</section>
+
+<!-- ========================= 5. DISCONNECTED ========================= -->
+<section class="screen">
+  <div class="screen-label"><span class="n">05</span><h2>Disconnected banner</h2><span class="note">socket dropped · output frozen, banner under tab bar, never covers the terminal</span></div>
+  <div class="scroller">
+  <div class="app short">
+    <div class="titlebar">
+      <div class="brandmark"><i>&gt;_</i>roosterm</div>
+      <div class="crumb"><span class="sep">/</span><svg class="ic" data-icon="fluent2/regular-20/server" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M7.5 5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM7 12.5c0-.28.22-.5.5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m.5 1.5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM5 4.5A2.5 2.5 0 0 1 7.5 2h5A2.5 2.5 0 0 1 15 4.5v11a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 5 15.5zM7.5 3C6.67 3 6 3.67 6 4.5v11c0 .83.67 1.5 1.5 1.5h5c.83 0 1.5-.67 1.5-1.5v-11c0-.83-.67-1.5-1.5-1.5z"/></svg>jhangyu@devbox.local</div>
+      <div class="spacer"></div>
+      <span class="pill warn"><span class="dot"></span>Disconnected</span>
+      <span class="avatar">JY</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab"><svg class="ic" data-icon="fluent2/regular-20/window_console" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M5.65 9.15c.2-.2.5-.2.7 0l2 2a.5.5 0 0 1 0 .7l-2 2a.5.5 0 0 1-.7-.7l1.64-1.65-1.64-1.65a.5.5 0 0 1 0-.7M14.5 13h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1M3 5.5A2.5 2.5 0 0 1 5.5 3h9A2.5 2.5 0 0 1 17 5.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 14.5zM16 6v-.5c0-.83-.68-1.5-1.5-1.5h-9C4.67 4 4 4.67 4 5.5V6zM4 7v7.5c0 .83.67 1.5 1.5 1.5h9c.82 0 1.5-.67 1.5-1.5V7z"/></svg><span class="t">zsh</span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <div class="tab active"><svg class="ic" data-icon="fluent2/regular-20/bot" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M12 5.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-5 1a1 1 0 1 1 2 0 1 1 0 0 1-2 0m3.5-4a.5.5 0 0 0-1 0V3h-3C5.67 3 5 3.67 5 4.5v4c0 .83.67 1.5 1.5 1.5h7c.83 0 1.5-.67 1.5-1.5v-4c0-.83-.67-1.5-1.5-1.5h-3zM6.5 4h7c.28 0 .5.22.5.5v4a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-4c0-.28.22-.5.5-.5m3.75 14c2.62-.04 4.2-.6 5.12-1.44A3.5 3.5 0 0 0 16.5 14h.01v-.69c0-1-.81-1.8-1.8-1.8h-3.2v-.01H5.3c-.99 0-1.8.81-1.8 1.81v.7c.04.77.25 1.75 1.13 2.55.93.84 2.5 1.4 5.12 1.44zm-4.94-5.5h9.38c.45 0 .81.37.81.81v.44c0 .69-.13 1.46-.8 2.07C14 16.45 12.66 17 10 17s-4.01-.55-4.7-1.18a2.6 2.6 0 0 1-.8-2.07v-.44c0-.44.36-.8.8-.8"/></svg><span class="t">claude</span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <div class="tab"><svg class="ic" data-icon="fluent2/regular-20/people_team" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M7.5 4.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0m8-.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0m-10 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0m1-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m.6 12H5a2 2 0 0 1-2-2V9.25c0-.14.11-.25.25-.25h1.76q.06-.55.37-1H3.25C2.56 8 2 8.56 2 9.25V13a3 3 0 0 0 3.4 2.97 5 5 0 0 1-.3-.97m9.5.97q.2.03.4.03a3 3 0 0 0 3-3V9.25C18 8.56 17.44 8 16.75 8h-2.13q.3.45.37 1h1.76q.23.02.25.25V13a2 2 0 0 1-2.1 2q-.1.5-.3.97M7.25 8C6.56 8 6 8.56 6 9.25V14a4 4 0 0 0 8 0V9.25C14 8.56 13.44 8 12.75 8zM7 9.25c0-.14.11-.25.25-.25h5.5q.23.02.25.25V14a3 3 0 1 1-6 0z"/></svg><span class="t">swarm-12345</span><span class="badge exit">PAUSED</span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <button class="newtab" aria-label="New tab" disabled style="opacity:.4"><svg class="ic" data-icon="fluent2/regular-20/add" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2.5c.28 0 .5.22.5.5v6.5H17a.5.5 0 0 1 0 1h-6.5V17a.5.5 0 0 1-1 0v-6.5H3a.5.5 0 0 1 0-1h6.5V3c0-.28.22-.5.5-.5"/></svg></button>
+    </div>
+    <div class="msgbar warn" role="alert">
+      <svg class="ic" data-icon="fluent2/regular-20/plug_disconnected" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M17.85 2.15c.2.2.2.5 0 .7L16.2 4.52a4.04 4.04 0 0 1-.34 5.33l-.3.3-.3.31c-.42.41-1.08.41-1.5 0L9.55 6.24a1.05 1.05 0 0 1 0-1.48l.6-.61a4.04 4.04 0 0 1 5.34-.34l1.67-1.66c.2-.2.5-.2.7 0m-2.71 2.7a3.04 3.04 0 0 0-4.29 0l-.3.3c-.19.2-.19.5 0 .7l3.6 3.6c.2.19.5.19.7 0l.3-.3a3.04 3.04 0 0 0 0-4.29zm-5.79 3.8c.2.2.2.5 0 .7L7.71 11 9 12.3l1.65-1.65a.5.5 0 0 1 .7.7L9.71 13l.44.45c.59.58.59 1.52 0 2.1l-.3.3a4.04 4.04 0 0 1-5.33.34l-1.67 1.66a.5.5 0 0 1-.7-.7l1.66-1.67a4.04 4.04 0 0 1 .34-5.33l.3-.3a1.5 1.5 0 0 1 2.1 0l.45.44 1.65-1.64c.2-.2.5-.2.7 0m-4.5 6.5a3.04 3.04 0 0 0 4.3 0l.3-.3c.19-.2.19-.5 0-.7l-3.6-3.6c-.2-.19-.5-.19-.7 0l-.3.3a3.04 3.04 0 0 0 0 4.3"/></svg>
+      <span><b>Connection to devbox.local lost.</b> Sessions keep running on the host; reconnect to resume output.</span>
+      <span class="meta">WebSocket 1006 · last data 09:41:12</span>
+      <div class="actions">
+        <button class="btn sm primary"><svg class="ic" data-icon="fluent2/regular-20/arrow_sync" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M11.41 3.64a.5.5 0 0 0 0-.71L9.3.8a.5.5 0 0 0-.7.7l1 1a7.5 7.5 0 0 0-4.08 13.5.5.5 0 0 0 .6-.8A6.5 6.5 0 0 1 10.14 3.5L8.59 5.04a.5.5 0 0 0 .7.7zM8.6 16.36a.5.5 0 0 0 0 .71l2.12 2.12a.5.5 0 0 0 .7-.7l-1-1a7.5 7.5 0 0 0 4.07-13.5.5.5 0 1 0-.59.8q.37.28.7.61a6.5 6.5 0 0 1-4.73 11.1l1.55-1.55a.5.5 0 1 0-.7-.7z"/></svg>Reconnect</button>
+        <button class="btn sm subtle" aria-label="Dismiss"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button>
+      </div>
+    </div>
+    <div class="term stale"><pre><span class="g">●</span> <span class="B">Bash</span>(cargo test -p roosterm-server session::)
+  <span class="d">⎿  Running…</span>
+     <span class="d">Compiling roosterm-server v0.1.0 (/Users/jhangyu/project/roosterm/server)</span>
+     <span class="d">Finished `test` profile [unoptimized + debuginfo] target(s) in 6.12s</span>
+     <span class="d">Running unittests src/lib.rs</span>
+
+<span class="o">✻ Reticulating…</span> <span class="d">(41s · ↓ 2.6k tokens · esc to interrupt)</span>
+
+<span class="d">╭──────────────────────────────────────────────────────────────────────────────╮</span>
+<span class="d">│</span> &gt; <span class="cur-hollow"> </span>                                                                          <span class="d">│</span>
+<span class="d">╰──────────────────────────────────────────────────────────────────────────────╯</span></pre></div>
+    <div class="statusbar"><span class="si warn"><svg class="ic" data-icon="fluent2/regular-20/plug_disconnected" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M17.85 2.15c.2.2.2.5 0 .7L16.2 4.52a4.04 4.04 0 0 1-.34 5.33l-.3.3-.3.31c-.42.41-1.08.41-1.5 0L9.55 6.24a1.05 1.05 0 0 1 0-1.48l.6-.61a4.04 4.04 0 0 1 5.34-.34l1.67-1.66c.2-.2.5-.2.7 0m-2.71 2.7a3.04 3.04 0 0 0-4.29 0l-.3.3c-.19.2-.19.5 0 .7l3.6 3.6c.2.19.5.19.7 0l.3-.3a3.04 3.04 0 0 0 0-4.29zm-5.79 3.8c.2.2.2.5 0 .7L7.71 11 9 12.3l1.65-1.65a.5.5 0 0 1 .7.7L9.71 13l.44.45c.59.58.59 1.52 0 2.1l-.3.3a4.04 4.04 0 0 1-5.33.34l-1.67 1.66a.5.5 0 0 1-.7-.7l1.66-1.67a4.04 4.04 0 0 1 .34-5.33l.3-.3a1.5 1.5 0 0 1 2.1 0l.45.44 1.65-1.64c.2-.2.5-.2.7 0m-4.5 6.5a3.04 3.04 0 0 0 4.3 0l.3-.3c.19-.2.19-.5 0-.7l-3.6-3.6c-.2-.19-.5-.19-.7 0l-.3.3a3.04 3.04 0 0 0 0 4.3"/></svg>Disconnected</span><span class="si">input disabled</span><span class="push si">160×34</span><span class="si">UTF-8</span></div>
+  </div>
+  </div>
+</section>
+
+<!-- ========================= 6. EXITED TAB ========================= -->
+<section class="screen">
+  <div class="screen-label"><span class="n">06</span><h2>Exited tab</h2><span class="note">shell process ended · tab stays until closed, scrollback kept</span></div>
+  <div class="scroller">
+  <div class="app short">
+    <div class="titlebar">
+      <div class="brandmark"><i>&gt;_</i>roosterm</div>
+      <div class="crumb"><span class="sep">/</span><svg class="ic" data-icon="fluent2/regular-20/server" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M7.5 5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM7 12.5c0-.28.22-.5.5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m.5 1.5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1zM5 4.5A2.5 2.5 0 0 1 7.5 2h5A2.5 2.5 0 0 1 15 4.5v11a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 5 15.5zM7.5 3C6.67 3 6 3.67 6 4.5v11c0 .83.67 1.5 1.5 1.5h5c.83 0 1.5-.67 1.5-1.5v-11c0-.83-.67-1.5-1.5-1.5z"/></svg>jhangyu@devbox.local</div>
+      <div class="spacer"></div>
+      <span class="pill ok"><span class="dot"></span>Connected · 21 ms</span>
+      <span class="avatar">JY</span>
+    </div>
+    <div class="tabbar">
+      <div class="tab active exited"><svg class="ic" data-icon="fluent2/regular-20/window_console" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M5.65 9.15c.2-.2.5-.2.7 0l2 2a.5.5 0 0 1 0 .7l-2 2a.5.5 0 0 1-.7-.7l1.64-1.65-1.64-1.65a.5.5 0 0 1 0-.7M14.5 13h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1M3 5.5A2.5 2.5 0 0 1 5.5 3h9A2.5 2.5 0 0 1 17 5.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 14.5zM16 6v-.5c0-.83-.68-1.5-1.5-1.5h-9C4.67 4 4 4.67 4 5.5V6zM4 7v7.5c0 .83.67 1.5 1.5 1.5h9c.82 0 1.5-.67 1.5-1.5V7z"/></svg><span class="t">zsh</span><span class="badge exit">Exited 0</span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <div class="tab"><svg class="ic" data-icon="fluent2/regular-20/bot" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M12 5.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-5 1a1 1 0 1 1 2 0 1 1 0 0 1-2 0m3.5-4a.5.5 0 0 0-1 0V3h-3C5.67 3 5 3.67 5 4.5v4c0 .83.67 1.5 1.5 1.5h7c.83 0 1.5-.67 1.5-1.5v-4c0-.83-.67-1.5-1.5-1.5h-3zM6.5 4h7c.28 0 .5.22.5.5v4a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-4c0-.28.22-.5.5-.5m3.75 14c2.62-.04 4.2-.6 5.12-1.44A3.5 3.5 0 0 0 16.5 14h.01v-.69c0-1-.81-1.8-1.8-1.8h-3.2v-.01H5.3c-.99 0-1.8.81-1.8 1.81v.7c.04.77.25 1.75 1.13 2.55.93.84 2.5 1.4 5.12 1.44zm-4.94-5.5h9.38c.45 0 .81.37.81.81v.44c0 .69-.13 1.46-.8 2.07C14 16.45 12.66 17 10 17s-4.01-.55-4.7-1.18a2.6 2.6 0 0 1-.8-2.07v-.44c0-.44.36-.8.8-.8"/></svg><span class="t">claude</span><span class="busy"></span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <div class="tab"><svg class="ic" data-icon="fluent2/regular-20/people_team" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M7.5 4.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0m8-.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0m-10 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0m1-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m.6 12H5a2 2 0 0 1-2-2V9.25c0-.14.11-.25.25-.25h1.76q.06-.55.37-1H3.25C2.56 8 2 8.56 2 9.25V13a3 3 0 0 0 3.4 2.97 5 5 0 0 1-.3-.97m9.5.97q.2.03.4.03a3 3 0 0 0 3-3V9.25C18 8.56 17.44 8 16.75 8h-2.13q.3.45.37 1h1.76q.23.02.25.25V13a2 2 0 0 1-2.1 2q-.1.5-.3.97M7.25 8C6.56 8 6 8.56 6 9.25V14a4 4 0 0 0 8 0V9.25C14 8.56 13.44 8 12.75 8zM7 9.25c0-.14.11-.25.25-.25h5.5q.23.02.25.25V14a3 3 0 1 1-6 0z"/></svg><span class="t">swarm-12345</span><span class="badge live">LIVE</span><button class="x" aria-label="Close tab"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg></button></div>
+      <button class="newtab" aria-label="New tab"><svg class="ic" data-icon="fluent2/regular-20/add" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2.5c.28 0 .5.22.5.5v6.5H17a.5.5 0 0 1 0 1h-6.5V17a.5.5 0 0 1-1 0v-6.5H3a.5.5 0 0 1 0-1h6.5V3c0-.28.22-.5.5-.5"/></svg><kbd>⌃⇧T</kbd></button>
+    </div>
+    <div class="term"><pre><span class="g">jhangyu@devbox</span> <span class="b">~/project/roosterm</span> <span class="d">(main)</span>
+<span class="B">$</span> git log --oneline -3
+<span class="y">cc3fcef</span> docs: freeze backend convergence contract
+<span class="y">5f7955a</span> docs: add Roosterm design spec and research notes
+<span class="y">a01d2e9</span> chore: initial commit
+<span class="g">jhangyu@devbox</span> <span class="b">~/project/roosterm</span> <span class="d">(main)</span>
+<span class="B">$</span> exit
+<span class="d">logout</span>
+<span class="d">[Process completed]</span></pre>
+      <div class="exitstrip" role="status">
+        <svg class="ic" data-icon="fluent2/regular-20/checkmark_circle" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16m0 1a7 7 0 1 0 0 14 7 7 0 0 0 0-14m3.36 4.65c.17.17.2.44.06.63l-.06.07-4 4a.5.5 0 0 1-.64.07l-.07-.06-2-2a.5.5 0 0 1 .63-.77l.07.06L9 11.3l3.65-3.65c.2-.2.51-.2.7 0"/></svg>
+        <span><b>Exited (code 0)</b> <span class="code">· zsh · PID 47702 · ran 1h 12m</span></span>
+        <div class="actions">
+          <button class="btn sm"><svg class="ic" data-icon="fluent2/regular-20/arrow_sync" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M11.41 3.64a.5.5 0 0 0 0-.71L9.3.8a.5.5 0 0 0-.7.7l1 1a7.5 7.5 0 0 0-4.08 13.5.5.5 0 0 0 .6-.8A6.5 6.5 0 0 1 10.14 3.5L8.59 5.04a.5.5 0 0 0 .7.7zM8.6 16.36a.5.5 0 0 0 0 .71l2.12 2.12a.5.5 0 0 0 .7-.7l-1-1a7.5 7.5 0 0 0 4.07-13.5.5.5 0 1 0-.59.8q.37.28.7.61a6.5 6.5 0 0 1-4.73 11.1l1.55-1.55a.5.5 0 1 0-.7-.7z"/></svg>Restart</button>
+          <button class="btn sm primary"><svg class="ic" data-icon="fluent2/regular-20/dismiss" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></svg>Close tab</button>
+        </div>
+      </div>
+    </div>
+    <div class="statusbar"><span class="si"><svg class="ic" data-icon="fluent2/regular-20/checkmark_circle" aria-hidden="true" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16m0 1a7 7 0 1 0 0 14 7 7 0 0 0 0-14m3.36 4.65c.17.17.2.44.06.63l-.06.07-4 4a.5.5 0 0 1-.64.07l-.07-.06-2-2a.5.5 0 0 1 .63-.77l.07.06L9 11.3l3.65-3.65c.2-.2.51-.2.7 0"/></svg>Process exited · code 0</span><span class="si">input disabled</span><span class="push si">160×34</span><span class="si">UTF-8</span></div>
+  </div>
+  </div>
+</section>
+
+</main>
+</body>
+</html>
