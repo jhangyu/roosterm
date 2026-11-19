@@ -7,13 +7,14 @@ roosterm needs a running herdr-core (`hc`). Both units below run `hc server star
 ## macOS (launchd)
 
 ```sh
-sed "s#/Users/USERNAME#$HOME#g" deploy/launchd/dev.roosterm.serve.plist > ~/Library/LaunchAgents/dev.roosterm.serve.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.roosterm.serve.plist
+python3 scripts/service.py install     # render the plist into ~/Library/LaunchAgents and load it (idempotent)
+python3 scripts/service.py status      # loaded, pid, last exit code, whether the listen port answers
+python3 scripts/service.py restart     # also: start, stop, uninstall
 ```
 
-The plist starts a login shell (`/bin/zsh -lc`) so hc inherits your login environment. If your login shell is not zsh, replace `/bin/zsh` in the copied plist. launchd restarts roosterm after a crash, not after a clean exit. Log: `~/Library/Logs/roosterm.log`.
+`roosterm serve` takes its listen address from `~/.config/roosterm/config.toml`. The plist starts a login shell (`/bin/zsh -lc`) so hc inherits your login environment. If your login shell is not zsh, replace `/bin/zsh` in `deploy/launchd/dev.roosterm.serve.plist` and run `install` again. launchd restarts roosterm after a crash, not after a clean exit. Log: `~/Library/Logs/roosterm.log`.
 
-Stop roosterm (hc keeps running): `launchctl bootout gui/$(id -u)/dev.roosterm.serve`.
+`stop` unloads the job (hc keeps running); it loads again at the next login or on `start`. Only one roosterm may own the listen port: stop any hand-started `roosterm serve` before `install` or `start`.
 
 ## Linux (systemd user units)
 
