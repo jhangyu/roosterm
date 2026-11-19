@@ -105,7 +105,7 @@ params: {"terminal":"t5"}  →  Terminal record
 
 ### terminal.attach → WebSocket stream
 ```
-params: {"terminal":"t1","cols":100,"rows":30}
+params: {"terminal":"t1","cols":100,"rows":30,"history":5000}
 result: {"channel":2,"automatic_input":true,"resize_notifications":false,"terminal":{Terminal…}}
 ```
 - Attaching makes this viewer active and sets the terminal size to `cols×rows` (observed `size` event).
@@ -113,7 +113,7 @@ result: {"channel":2,"automatic_input":true,"resize_notifications":false,"termin
 - Several attaches on one connection get distinct channels; the last active viewer sets the size.
 
 Stream on the channel (core → roosterm), in order:
-1. **First paint**: one DATA frame starting with `\x18\x1b[!p` (CAN + soft reset) followed by mode resets and the full current screen. After a core restart it still contains the output written before the crash.
+1. **First paint**: one DATA frame starting with `\x18\x1b[!p` (CAN + soft reset) followed by mode resets, up to `history` lines of main-screen scrollback (default 0: screen only; observed: a Claude Code tab's whole transcript with `history:5000`, only the last screen without it), and the full current screen. Roosterm asks for 5000 (the web terminal's scrollback) and prefixes the paint with `\x1b[3J` so a reconnecting browser terminal does not stack the replayed scrollback twice. After a core restart it still contains the output written before the crash.
 2. Live DATA frames: raw program output.
 3. CLOSE with JSON reason when the program ends or is killed:
    `{"exit_code":7,"finished_ms":1795045494302,"reason":"exited","signal":null}` / `{"exit_code":null,…,"reason":"killed","signal":1}`.

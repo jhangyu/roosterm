@@ -107,12 +107,16 @@ func write(t *testing.T, conn *websocket.Conn, typ websocket.MessageType, b stri
 	}
 }
 
+// wsPaint is what the browser gets for an attach: clear scrollback (ED3), then hc's first paint,
+// so the scrollback the paint replays never stacks on what a reconnecting terminal already holds.
+func wsPaint(id string) []byte { return append([]byte("\x1b[3J"), hctest.Paint(id)...) }
+
 func TestBridgeFirstPaintThenEcho(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	id := e.tab()
 	conn := e.dial(id)
-	if typ, b := read(t, conn); typ != websocket.MessageBinary || !bytes.Equal(b, hctest.Paint(id)) {
+	if typ, b := read(t, conn); typ != websocket.MessageBinary || !bytes.Equal(b, wsPaint(id)) {
 		t.Fatalf("first message: expected binary paint, got %v %q", typ, b)
 	}
 	write(t, conn, websocket.MessageBinary, "echo $$\r")
@@ -257,7 +261,7 @@ func TestBridgeCoreOfflineThenOnline(t *testing.T) {
 	if typ, b := read(t, conn); typ != websocket.MessageText || string(b) != `{"type":"core","state":"online"}` {
 		t.Fatalf("after restart: expected online text, got %v %q", typ, b)
 	}
-	if typ, b := read(t, conn); typ != websocket.MessageBinary || !bytes.Equal(b, hctest.Paint(id)) {
+	if typ, b := read(t, conn); typ != websocket.MessageBinary || !bytes.Equal(b, wsPaint(id)) {
 		t.Fatalf("after online: expected first paint, got %v %q", typ, b)
 	}
 	if term, _ := e.fake.Get(id); term.Cols != 90 || term.Rows != 20 {

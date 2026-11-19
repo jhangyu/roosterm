@@ -365,14 +365,22 @@ func (s *session) detach(st *hc.Stream) {
 	}
 }
 
+// clearScrollback (ED3) goes before each attach's first paint: the paint replays scrollback, and the
+// browser keeps its terminal across reconnects, so without it every reattach would duplicate history.
+var clearScrollback = []byte("\x1b[3J")
+
 // forward copies hc output to the WebSocket and returns credit after each message.
 func (s *session) forward(ctx context.Context, st *hc.Stream) error {
-	for {
+	for first := true; ; first = false {
 		p, err := st.Recv(ctx)
 		if err != nil {
 			return err
 		}
-		if err := s.conn.Write(ctx, websocket.MessageBinary, p); err != nil {
+		msg := p
+		if first {
+			msg = append(append([]byte{}, clearScrollback...), p...)
+		}
+		if err := s.conn.Write(ctx, websocket.MessageBinary, msg); err != nil {
 			return fmt.Errorf("ws write tab %s: %w", s.id, err)
 		}
 		if err := st.Credit(len(p)); err != nil {

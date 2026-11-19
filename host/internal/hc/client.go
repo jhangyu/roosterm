@@ -356,8 +356,13 @@ func (c *Client) Remove(ctx context.Context, id string) error {
 	return c.Call(ctx, "terminal.rm", terminalRef{id}, nil)
 }
 
-// Attach opens a viewer stream; the first Recv returns the full-screen first paint.
+// attachHistoryLines is how much main-screen scrollback the first paint replays; it equals the
+// web terminal's scrollback (SCROLLBACK_LINES in web/src/terminal/TerminalPane.tsx), which trims the rest.
+const attachHistoryLines = 5000
+
+// Attach opens a viewer stream; the first Recv returns the first paint: up to attachHistoryLines
+// of scrollback, then the full screen.
 func (c *Client) Attach(ctx context.Context, id string, size Size) (*Stream, error) {
 	return c.call(ctx, "terminal.attach", id, true,
-		map[string]any{"terminal": id, "cols": size.Cols, "rows": size.Rows}, nil)
+		map[string]any{"terminal": id, "cols": size.Cols, "rows": size.Rows, "history": attachHistoryLines}, nil)
 }
