@@ -37,7 +37,7 @@ function RenameForm({ tab, onRename }: { tab: Tab; onRename: (id: string, label:
       <div className="mb-[22px] flex items-start justify-between">
         <DialogTitle className="text-subtitle1 font-semibold">Rename session</DialogTitle>
         <DialogClose asChild>
-          <Button variant="ghost" className={`${ICON_BTN} -mt-1 -mr-1`} aria-label="Close">
+          <Button variant="ghost" className={ICON_BTN} aria-label="Close">
             <DismissIcon />
           </Button>
         </DialogClose>

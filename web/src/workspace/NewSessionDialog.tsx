@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { BTN, BTN_PRIMARY, DIALOG, ICON_BTN } from "./classes"
 
 export type CreateRequest = { command?: string[]; label?: string }
@@ -30,10 +31,6 @@ type Swarms = { kind: "loading" } | { kind: "ready"; names: string[] } | { kind:
 // Swarm tab request (backend plan, HTTP/WS API: POST /api/tabs); the socket name doubles as the tab label.
 export const swarmTab = (name: string): CreateRequest => ({ command: ["tmux", "-L", name, "a"], label: name })
 
-// .radio: 20px ring, grey-38, primary when checked.
-const RADIO =
-  "size-5 border-grey-38 bg-card shadow-none data-[state=checked]:border-primary [&_[data-slot=radio-group-indicator]]:size-5 [&_[data-slot=radio-group-indicator]>span]:size-2.5 [&_[data-slot=radio-group-indicator]>span]:bg-primary"
-
 function Choice(props: { value: Kind; icon: ReactNode; title: string; hint: string }) {
   const id = `session-kind-${props.value}`
   return (
@@ -51,7 +48,7 @@ function Choice(props: { value: Kind; icon: ReactNode; title: string; hint: stri
         <b className="block font-semibold">{props.title}</b>
         <small className="text-caption text-muted-foreground">{props.hint}</small>
       </span>
-      <RadioGroupItem id={id} value={props.value} className={RADIO} />
+      <RadioGroupItem id={id} value={props.value} />
     </Label>
   )
 }
@@ -96,61 +93,67 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, onUnauthorized 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={DIALOG} showCloseButton={false}>
-        <div className="mb-1.5 flex items-start justify-between">
-          <DialogTitle className="text-subtitle1 font-semibold">New session</DialogTitle>
-          <DialogClose asChild>
-            <Button variant="ghost" className={`${ICON_BTN} -mt-1 -mr-1`} aria-label="Close">
-              <DismissIcon />
-            </Button>
-          </DialogClose>
-        </div>
-        <DialogDescription className="mb-[22px] text-body text-muted-foreground">
-          Start a fresh shell on {window.location.hostname}, or attach to a running Claude swarm.
-        </DialogDescription>
+      {/* Rows: header block, socket list (scrolls inside the dialog), actions: the dialog never outgrows the viewport. */}
+      <DialogContent className={`${DIALOG} max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]`} showCloseButton={false}>
+        <div>
+          <div className="mb-1.5 flex items-start justify-between">
+            <DialogTitle className="text-subtitle1 font-semibold">New session</DialogTitle>
+            <DialogClose asChild>
+              <Button variant="ghost" className={ICON_BTN} aria-label="Close">
+                <DismissIcon />
+              </Button>
+            </DialogClose>
+          </div>
+          <DialogDescription className="mb-[22px] text-body text-muted-foreground">
+            Start a fresh shell on {window.location.hostname}, or attach to a running Claude swarm.
+          </DialogDescription>
 
-        <RadioGroup
-          aria-label="Session type"
-          value={kind}
-          onValueChange={(v) => setKind(v === "swarm" ? "swarm" : "shell")}
-          className="mb-[22px] grid grid-cols-1 gap-3 sm:grid-cols-2"
-        >
-          <Choice value="shell" icon={<WindowConsoleIcon />} title="Shell" hint="New login shell on this host" />
-          <Choice value="swarm" icon={<PeopleTeamIcon />} title="Swarm" hint="Attach to a running tmux swarm socket" />
-        </RadioGroup>
+          <RadioGroup
+            aria-label="Session type"
+            value={kind}
+            onValueChange={(v) => setKind(v === "swarm" ? "swarm" : "shell")}
+            className="mb-[22px] grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
+            <Choice value="shell" icon={<WindowConsoleIcon />} title="Shell" hint="New login shell on this host" />
+            <Choice value="swarm" icon={<PeopleTeamIcon />} title="Swarm" hint="Attach to a running tmux swarm socket" />
+          </RadioGroup>
 
-        {kind === "swarm" && (
-          <>
+          {kind === "swarm" && (
             <div className="mb-2 flex items-baseline justify-between">
               <b className="font-semibold">Available swarm sockets</b>
               <small className="text-caption text-muted-foreground">{listNote}</small>
             </div>
-            <div className="mb-[26px] overflow-hidden rounded-md border border-grey-88">
-              {swarms.kind === "loading" && <p className="px-4 py-3.5 text-muted-foreground">Loading swarm sockets…</p>}
-              {swarms.kind === "error" && <p className="break-all px-4 py-3.5 text-destructive">{swarms.message}</p>}
-              {swarms.kind === "ready" && swarms.names.length === 0 && (
-                <p className="px-4 py-3.5 text-muted-foreground">No claude-swarm-* sessions on this host</p>
-              )}
-              {swarms.kind === "ready" && swarms.names.length > 0 && (
-                <RadioGroup aria-label="Swarm socket" value={picked ?? ""} onValueChange={setPicked} className="gap-0">
-                  {swarms.names.map((name) => {
-                    const id = `swarm-${name}`
-                    return (
-                      // .sock / .sock.selected
-                      <Label
-                        key={name}
-                        htmlFor={id}
-                        className={`grid cursor-pointer grid-cols-[20px_1fr] items-center gap-3.5 px-4 py-3.5 text-body font-normal hover:bg-grey-98 border-t border-grey-94 first:border-t-0 has-[[data-state=checked]]:bg-accent`}
-                      >
-                        <RadioGroupItem id={id} value={name} className={RADIO} />
-                        <code className="font-mono text-[13px] font-semibold">{name}</code>
-                      </Label>
-                    )
-                  })}
-                </RadioGroup>
-              )}
-            </div>
-          </>
+          )}
+        </div>
+
+        {kind === "swarm" ? (
+          <ScrollArea className="mb-[26px] min-h-0 overflow-hidden rounded-md border border-grey-88">
+            {swarms.kind === "loading" && <p className="px-4 py-3.5 text-muted-foreground">Loading swarm sockets…</p>}
+            {swarms.kind === "error" && <p className="break-all px-4 py-3.5 text-destructive">{swarms.message}</p>}
+            {swarms.kind === "ready" && swarms.names.length === 0 && (
+              <p className="px-4 py-3.5 text-muted-foreground">No claude-swarm-* sessions on this host</p>
+            )}
+            {swarms.kind === "ready" && swarms.names.length > 0 && (
+              <RadioGroup aria-label="Swarm socket" value={picked ?? ""} onValueChange={setPicked} className="gap-0">
+                {swarms.names.map((name) => {
+                  const id = `swarm-${name}`
+                  return (
+                    // .sock / .sock.selected
+                    <Label
+                      key={name}
+                      htmlFor={id}
+                      className="grid cursor-pointer grid-cols-[20px_1fr] items-center gap-3.5 border-t border-grey-94 px-4 py-3.5 text-body font-normal first:border-t-0 hover:bg-grey-98 has-[[data-state=checked]]:bg-accent"
+                    >
+                      <RadioGroupItem id={id} value={name} />
+                      <code className="font-mono text-[13px] font-semibold">{name}</code>
+                    </Label>
+                  )
+                })}
+              </RadioGroup>
+            )}
+          </ScrollArea>
+        ) : (
+          <div />
         )}
 
         <div className="flex justify-end gap-2">

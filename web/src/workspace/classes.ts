@@ -14,7 +14,7 @@ export const ICON_BTN = "size-9 rounded-sm text-grey-26 hover:bg-foreground/5 ho
 
 // .field input: 40px, 0 12px, corner-small, grey-38 bottom stroke, Fluent focus underline.
 export const FIELD_INPUT =
-  "h-10 rounded-sm border-input border-b-grey-38 bg-card px-3 text-body focus-visible:border-b-2 focus-visible:border-b-primary focus-visible:ring-0"
+  "h-10 rounded-sm border-input border-b-grey-38 bg-card px-3 py-0 text-body focus-visible:border-input focus-visible:border-b-2 focus-visible:border-b-primary focus-visible:ring-0"
 
 // .badge base + .run / .idle
 export const BADGE = "h-[22px] gap-1.5 rounded-full border-0 px-2.5 text-caption font-semibold leading-none"

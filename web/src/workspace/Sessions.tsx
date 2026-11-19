@@ -4,6 +4,7 @@ import {
   DismissIcon,
   EditIcon,
   PeopleTeamIcon,
+  PersonIcon,
   ServerIcon,
   SignOutIcon,
   WindowConsoleIcon,
@@ -51,14 +52,14 @@ export function SessionRail({ tabs, activeId, onSelect, onNew, onLogout }: Sessi
         </span>
         <div>
           <b className="block text-subtitle2 font-semibold">Roosterm</b>
-          <span className="flex items-center gap-1 text-caption text-muted-foreground">
+          <span className="flex items-center gap-1 text-caption leading-5 text-muted-foreground">
             <ServerIcon className="size-4 shrink-0" />
             {window.location.hostname}
           </span>
         </div>
       </div>
       <div className="flex items-center justify-between px-2 pt-1.5 pb-2.5">
-        <span className="text-caption font-semibold tracking-[.04em] text-muted-foreground uppercase">
+        <span className="text-caption leading-5 font-semibold tracking-[.04em] text-muted-foreground uppercase">
           Sessions · {tabs.length}
         </span>
       </div>
@@ -111,9 +112,13 @@ export function SessionRail({ tabs, activeId, onSelect, onNew, onLogout }: Sessi
       </div>
       {/* .rail-foot */}
       <div className="mt-auto flex items-center gap-2.5 border-t border-foreground/6 px-2 pt-3">
-        <span className="flex-1 leading-4">
+        {/* .avatar: no username endpoint exists, so the person glyph stands in for initials */}
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-150 text-brand-60">
+          <PersonIcon className="size-4 shrink-0" />
+        </span>
+        <span className="min-w-0 flex-1 leading-4">
           Signed in
-          <small className="block text-[11px] text-muted-foreground">Sessions keep running after sign-out</small>
+          <small className="block truncate text-[11px] text-muted-foreground">Sessions keep running</small>
         </span>
         <Button variant="ghost" className={ICON_BTN} aria-label="Sign out" title="Sign out" onClick={onLogout}>
           <SignOutIcon />
@@ -131,7 +136,7 @@ export function MainHead({ active, onRename, onClose }: { active: Tab } & Active
     <div className="hidden items-center gap-3.5 px-1 pb-[18px] md:flex">
       <h2 className="truncate text-subtitle1 font-semibold">{active.label}</h2>
       <SessionBadge tab={active} />
-      <span className="truncate font-mono text-caption text-muted-foreground">{active.id}</span>
+      <span className="truncate font-mono text-caption leading-5 text-muted-foreground">{active.id}</span>
       <span className="flex-1" />
       <Button variant="ghost" className={ICON_BTN} aria-label="Rename session" title="Rename session" onClick={() => onRename(active)}>
         <EditIcon />
@@ -160,9 +165,10 @@ export function PhoneBar({
       <div className="flex items-center gap-1 pt-1.5 pr-3 pb-2 pl-4">
         <div className="min-w-0 flex-1">
           <b className="block truncate text-subtitle2 font-semibold">{active?.label ?? "Roosterm"}</b>
-          <small className="block truncate font-mono text-caption text-muted-foreground">
-            {active?.id ?? window.location.hostname}
-          </small>
+          {/* inline caption on a body line box, as the mockup's `.title small` (line 21px) */}
+          <div className="truncate">
+            <small className="font-mono text-caption leading-5 text-muted-foreground">{active?.id ?? window.location.hostname}</small>
+          </div>
         </div>
         {active !== null && (
           <>
