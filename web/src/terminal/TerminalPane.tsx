@@ -117,10 +117,10 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
     const look = readTerminalLook()
     const phone = readPhoneMetrics()
     const desktop = window.matchMedia(DESKTOP_QUERY)
-    // `lineHeight` in both metric sets is the target row height in px (tokens.css), converted to xterm's ratio here.
+    // `rowHeightPx` in both metric sets is the target row height in px (tokens.css), converted to xterm's ratio here.
     const metrics = () => {
       const m = desktop.matches ? look : phone
-      return { fontSize: m.fontSize, lineHeight: lineHeightForRow(look.fontFamily, m.fontSize, m.lineHeight) }
+      return { fontSize: m.fontSize, lineHeight: lineHeightForRow(look.fontFamily, m.fontSize, m.rowHeightPx) }
     }
     const term = new Terminal({
       ...look,

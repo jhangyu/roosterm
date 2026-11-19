@@ -15,7 +15,7 @@ const THEME_VARS = {
   white: "--term-white", brightWhite: "--term-bright-white",
 } as const satisfies Partial<Record<keyof ITheme, string>>
 
-export type TerminalLook = { theme: ITheme; fontFamily: string; fontSize: number; lineHeight: number }
+export type TerminalLook = { theme: ITheme; fontFamily: string; fontSize: number; rowHeightPx: number }
 
 export function readTerminalLook(): TerminalLook {
   const css = getComputedStyle(document.documentElement)
@@ -36,6 +36,6 @@ export function readTerminalLook(): TerminalLook {
     theme,
     fontFamily: read("--app-font-mono"),
     fontSize: num("--terminal-font-size"),
-    lineHeight: num("--terminal-line-height"),
+    rowHeightPx: num("--terminal-row-height"),
   }
 }

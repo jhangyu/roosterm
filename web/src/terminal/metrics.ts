@@ -1,7 +1,7 @@
 // Desktop vs phone switch: Tailwind `md` (768px), the same width the key bar and card padding use.
 export const DESKTOP_QUERY = "(min-width: 768px)"
 
-export type TerminalMetrics = { fontSize: number; lineHeight: number }
+export type TerminalMetrics = { fontSize: number; rowHeightPx: number }
 
 function readNumber(name: string): number {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
@@ -14,7 +14,7 @@ function readNumber(name: string): number {
 
 export const readPhoneMetrics = (): TerminalMetrics => ({
   fontSize: readNumber("--terminal-font-size-phone"),
-  lineHeight: readNumber("--terminal-line-height-phone"),
+  rowHeightPx: readNumber("--terminal-row-height-phone"),
 })
 
 // xterm's `lineHeight` multiplies the measured font cell height (font dependent), so a fixed ratio cannot give the
