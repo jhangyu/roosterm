@@ -36,15 +36,15 @@ async function call(op: string, method: string, path: string, body?: unknown, ta
 }
 
 const TAB_SHAPE =
-  "{id: string, label: string, exited: boolean, exitCode: int|null, signal: int|null, reason: string (when exited)}"
+  "{id: string, label: string, exited: boolean, exitCode: int|null, signal: int|null, reason: string (when exited), hidden: boolean}"
 
 function parseTab(op: string, status: number, v: unknown): Tab {
   if (typeof v === "object" && v !== null) {
-    const { id, label, exited } = v as Record<string, unknown>
-    if (typeof id === "string" && typeof label === "string" && typeof exited === "boolean") {
-      if (!exited) return { id, label, end: null }
+    const { id, label, exited, hidden } = v as Record<string, unknown>
+    if (typeof id === "string" && typeof label === "string" && typeof exited === "boolean" && typeof hidden === "boolean") {
+      if (!exited) return { id, label, hidden, end: null }
       const end = parseTabEnd(v)
-      if (end !== undefined) return { id, label, end }
+      if (end !== undefined) return { id, label, hidden, end }
     }
   }
   throw new ApiError(op, status, null, `expected ${TAB_SHAPE}, got ${JSON.stringify(v)}`)
@@ -86,6 +86,13 @@ export async function createTab(request: { command?: string[]; label?: string })
 export async function renameTab(id: string, label: string): Promise<Tab> {
   const op = "rename tab"
   const res = await call(op, "PATCH", tabPath(id), { label }, id)
+  return parseTab(op, res.status, await json(op, res))
+}
+
+// Hide or re-show a tab (PATCH /api/tabs/{id} {"hidden": bool}); the process is untouched.
+export async function setTabHidden(id: string, hidden: boolean): Promise<Tab> {
+  const op = hidden ? "hide tab" : "show tab"
+  const res = await call(op, "PATCH", tabPath(id), { hidden }, id)
   return parseTab(op, res.status, await json(op, res))
 }
 

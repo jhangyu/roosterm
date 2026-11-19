@@ -1,6 +1,7 @@
 import type { Tab } from "@/api/types"
 import {
   AddIcon,
+  DeleteIcon,
   DismissIcon,
   EditIcon,
   PeopleTeamIcon,
@@ -37,10 +38,13 @@ export type SessionsProps = {
   activeId: string | null
   onSelect: (id: string) => void
   onNew: () => void
+  onHide: (tab: Tab) => void
 }
 
+const HIDE_LABEL = "Hide tab (session keeps running)"
+
 // Mockup 3 screen 02 `.rail`: brand, section label, session cards, dashed "New session", footer with sign-out.
-export function SessionRail({ tabs, activeId, onSelect, onNew, onLogout }: SessionsProps & { onLogout: () => void }) {
+export function SessionRail({ tabs, activeId, onSelect, onNew, onHide, onLogout }: SessionsProps & { onLogout: () => void }) {
   return (
     <nav
       aria-label="Sessions"
@@ -70,33 +74,48 @@ export function SessionRail({ tabs, activeId, onSelect, onNew, onLogout }: Sessi
             const active = tab.id === activeId
             const exited = tab.end !== null
             return (
-              // .session / .session.active / .session.exited
-              <Button
-                key={tab.id}
-                variant="ghost"
-                aria-current={active ? "true" : undefined}
-                onClick={() => onSelect(tab.id)}
-                className={cn(
-                  "relative grid h-auto grid-cols-[36px_1fr] items-start justify-items-start gap-3 rounded-md p-3 text-left text-body font-normal whitespace-normal text-foreground hover:bg-card/60 active:not-aria-[haspopup]:translate-y-0",
-                  active &&
-                    "bg-card shadow-4 hover:bg-card before:absolute before:top-[18px] before:bottom-[18px] before:left-0 before:w-[3px] before:rounded-full before:bg-primary",
-                )}
-              >
-                <span
+              // Not in mockup 3: the card's top-right hide X (a sibling, since buttons cannot nest).
+              <div key={tab.id} className="group relative">
+                {/* .session / .session.active / .session.exited */}
+                <Button
+                  variant="ghost"
+                  aria-current={active ? "true" : undefined}
+                  onClick={() => onSelect(tab.id)}
                   className={cn(
-                    "grid size-9 place-items-center rounded-sm bg-grey-94 text-grey-26",
-                    active && "bg-accent text-primary",
-                    exited && !active && "bg-grey-96 text-grey-74",
+                    "relative grid h-auto w-full grid-cols-[36px_1fr] items-start justify-items-start gap-3 rounded-md p-3 text-left text-body font-normal whitespace-normal text-foreground hover:bg-card/60 active:not-aria-[haspopup]:translate-y-0",
+                    active &&
+                      "bg-card shadow-4 hover:bg-card before:absolute before:top-[18px] before:bottom-[18px] before:left-0 before:w-[3px] before:rounded-full before:bg-primary",
                   )}
                 >
-                  {isSwarm(tab) ? <PeopleTeamIcon /> : <WindowConsoleIcon />}
-                </span>
-                <span className="min-w-0">
-                  <span className={cn("block truncate font-semibold", exited && "text-grey-38")}>{tab.label}</span>
-                  <span className="mt-0.5 block truncate font-mono text-caption text-muted-foreground">{tab.id}</span>
-                  <SessionBadge tab={tab} className="mt-2" />
-                </span>
-              </Button>
+                  <span
+                    className={cn(
+                      "grid size-9 place-items-center rounded-sm bg-grey-94 text-grey-26",
+                      active && "bg-accent text-primary",
+                      exited && !active && "bg-grey-96 text-grey-74",
+                    )}
+                  >
+                    {isSwarm(tab) ? <PeopleTeamIcon /> : <WindowConsoleIcon />}
+                  </span>
+                  <span className="min-w-0 pr-6">
+                    <span className={cn("block truncate font-semibold", exited && "text-grey-38")}>{tab.label}</span>
+                    <span className="mt-0.5 block truncate font-mono text-caption text-muted-foreground">{tab.id}</span>
+                    <SessionBadge tab={tab} className="mt-2" />
+                  </span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    ICON_BTN,
+                    "absolute top-2 right-2 size-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                    active && "opacity-100",
+                  )}
+                  aria-label={`${HIDE_LABEL}: ${tab.label}`}
+                  title={HIDE_LABEL}
+                  onClick={() => onHide(tab)}
+                >
+                  <DismissIcon className="size-4 shrink-0" />
+                </Button>
+              </div>
             )
           })}
         </div>
@@ -142,7 +161,7 @@ export function MainHead({ active, onRename, onClose }: { active: Tab } & Active
         <EditIcon />
       </Button>
       <Button variant="ghost" className={ICON_BTN} aria-label="Close session" title="Close session" onClick={() => onClose(active)}>
-        <DismissIcon />
+        <DeleteIcon />
       </Button>
     </div>
   )
@@ -154,6 +173,7 @@ export function PhoneBar({
   activeId,
   onSelect,
   onNew,
+  onHide,
   onLogout,
   onRename,
   onClose,
@@ -176,7 +196,7 @@ export function PhoneBar({
               <EditIcon />
             </Button>
             <Button variant="ghost" className={phoneBtn} aria-label="Close session" onClick={() => onClose(active)}>
-              <DismissIcon />
+              <DeleteIcon />
             </Button>
           </>
         )}
@@ -188,20 +208,32 @@ export function PhoneBar({
         {tabs.map((tab) => {
           const on = tab.id === activeId
           return (
-            // .chip / .chip.on
-            <Button
+            // .chip / .chip.on, plus a hide X (not in mockup 3) as a sibling button inside the chip outline
+            <span
               key={tab.id}
-              variant="ghost"
-              aria-current={on ? "true" : undefined}
-              onClick={() => onSelect(tab.id)}
               className={cn(
-                "h-8 gap-1.5 rounded-full border-foreground/6 bg-card/60 px-3 text-[13px] font-semibold text-grey-26 hover:bg-card",
+                "flex h-8 shrink-0 items-center rounded-full border border-foreground/6 bg-card/60 text-grey-26 hover:bg-card",
                 on && "border-transparent bg-card text-foreground shadow-4",
               )}
             >
-              {on && tab.end === null && <Dot live className="text-success" />}
-              {tab.label}
-            </Button>
+              <Button
+                variant="ghost"
+                aria-current={on ? "true" : undefined}
+                onClick={() => onSelect(tab.id)}
+                className="h-8 gap-1.5 rounded-full border-0 bg-transparent pr-1 pl-3 text-[13px] font-semibold text-inherit hover:bg-transparent"
+              >
+                {on && tab.end === null && <Dot live className="text-success" />}
+                {tab.label}
+              </Button>
+              <Button
+                variant="ghost"
+                aria-label={`${HIDE_LABEL}: ${tab.label}`}
+                onClick={() => onHide(tab)}
+                className="mr-1 size-6 rounded-full p-0 text-grey-38 hover:bg-foreground/5 hover:text-foreground"
+              >
+                <DismissIcon className="size-3.5 shrink-0" />
+              </Button>
+            </span>
           )
         })}
         {/* .chip.add */}

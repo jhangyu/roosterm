@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { closeTab, createTab, listTabs, logout, renameTab } from "@/api/http"
+import { closeTab, createTab, listTabs, logout, renameTab, setTabHidden } from "@/api/http"
 import { ApiError, type Tab, type TabEnd } from "@/api/types"
 import { AddIcon, ArrowClockwiseIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import { ErrorAlert } from "@/workspace/ErrorAlert"
 import { NewSessionDialog, restartRequest, type CreateRequest } from "@/workspace/NewSessionDialog"
 import { CloseConfirm, RenameDialog } from "@/workspace/SessionDialogs"
 import { MainHead, PhoneBar, SessionRail } from "@/workspace/Sessions"
-import { applyListing, removeTab, type Workspace } from "@/workspace/tabs"
+import { applyListing, hideTab, removeTab, showTab, type Workspace } from "@/workspace/tabs"
 
 type Auth = "checking" | "anonymous" | "signed-in"
 
@@ -21,7 +21,7 @@ const NOT_FOUND = 404
 
 export default function App() {
   const [auth, setAuth] = useState<Auth>("checking")
-  const [{ tabs, activeId }, setWs] = useState<Workspace>({ tabs: [], activeId: null })
+  const [{ tabs, hidden, activeId }, setWs] = useState<Workspace>({ tabs: [], hidden: [], activeId: null })
   const [error, setError] = useState<ApiError | null>(null)
   // True from a terminal socket loss until the next successful API call: the pane's "Connection lost"
   // banner is then the one signal for an unreachable host, so network failures are not repeated as alerts.
@@ -70,7 +70,7 @@ export default function App() {
   const create = (request: CreateRequest) =>
     void run(async () => {
       const tab = await createTab(request)
-      setWs(({ tabs: ts }) => ({ tabs: [...ts, tab], activeId: tab.id }))
+      setWs((ws) => showTab(ws, tab))
       setNewOpen(false)
     })
 
@@ -97,11 +97,30 @@ export default function App() {
       setConfirming(null)
     })
 
+  // Hide keeps the process running; 404 = another client already removed it: drop the stale entry, as closeById does.
+  const hide = (tab: Tab) =>
+    void run(async () => {
+      try {
+        const updated = await setTabHidden(tab.id, true)
+        setWs((ws) => hideTab(ws, updated))
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === NOT_FOUND)) throw e
+        setWs((ws) => removeTab(ws, tab.id))
+      }
+    })
+
+  const show = (tab: Tab) =>
+    void run(async () => {
+      const updated = await setTabHidden(tab.id, false)
+      setWs((ws) => showTab(ws, updated))
+      setNewOpen(false)
+    })
+
   // Exited-panel Restart: open a session of the same kind and label, switch to it, then remove the exited one.
   const restart = (old: Tab) =>
     void run(async () => {
       const tab = await createTab(restartRequest(old))
-      setWs(({ tabs: ts }) => ({ tabs: [...ts, tab], activeId: tab.id }))
+      setWs((ws) => showTab(ws, tab))
       await closeById(old.id)
     })
 
@@ -150,13 +169,14 @@ export default function App() {
   return (
     // Mockup 3 screen 02 `.desk`: Mica page, 288px Acrylic rail + main column; phone: one column (screen 04).
     <div className="grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)] bg-(image:--mica) text-foreground md:grid-cols-[288px_1fr]">
-      <SessionRail tabs={tabs} activeId={activeId} onSelect={select} onNew={openNew} onLogout={signOutOfHost} />
+      <SessionRail tabs={tabs} activeId={activeId} onSelect={select} onNew={openNew} onHide={hide} onLogout={signOutOfHost} />
       <main className="relative z-10 flex min-h-0 min-w-0 flex-col md:px-7 md:pt-6 md:pb-7">
         <PhoneBar
           tabs={tabs}
           activeId={activeId}
           onSelect={select}
           onNew={openNew}
+          onHide={hide}
           onLogout={signOutOfHost}
           onRename={setRenaming}
           onClose={requestClose}
@@ -181,7 +201,14 @@ export default function App() {
           )}
         </div>
       </main>
-      <NewSessionDialog open={newOpen} onOpenChange={setNewOpen} onCreate={create} onUnauthorized={signOut} />
+      <NewSessionDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        onCreate={create}
+        hidden={hidden}
+        onShow={show}
+        onUnauthorized={signOut}
+      />
       <RenameDialog tab={renaming} onCancel={() => setRenaming(null)} onRename={rename} />
       <CloseConfirm tab={confirming} onCancel={() => setConfirming(null)} onConfirm={close} />
     </div>

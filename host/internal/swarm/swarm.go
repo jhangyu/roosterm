@@ -1,13 +1,16 @@
-// Package swarm lists Claude agent-team tmux servers (claude-swarm-* sockets). It never connects to them.
+// Package swarm lists live Claude agent-team tmux servers (claude-swarm-* sockets).
+// It probes each socket with a bare connect (no tmux protocol) and deletes the files of dead servers.
 package swarm
 
 import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const Prefix = "claude-swarm-"
@@ -21,7 +24,8 @@ func Dir(getenv func(string) string, uid int) string {
 	return filepath.Join(base, fmt.Sprintf("tmux-%d", uid))
 }
 
-// List returns the names of Unix sockets in dir that start with Prefix, sorted.
+// List returns the names of live Unix sockets in dir that start with Prefix, sorted.
+// A socket whose connect is refused belongs to a dead tmux server: its file is removed and not listed.
 // A missing dir means no tmux server has run: empty list, no error.
 func List(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir) // sorted by name
@@ -34,8 +38,31 @@ func List(dir string) ([]string, error) {
 	names := []string{}
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), Prefix) && e.Type()&fs.ModeSocket != 0 {
-			names = append(names, e.Name())
+			live, err := probe(filepath.Join(dir, e.Name()))
+			if err != nil {
+				return nil, err
+			}
+			if live {
+				names = append(names, e.Name())
+			}
 		}
 	}
 	return names, nil
+}
+
+// probe reports whether a server accepts connections on the socket at path.
+// ECONNREFUSED means dead: the stale file is removed. Anything else unexpected is an error.
+func probe(path string) (bool, error) {
+	c, err := net.Dial("unix", path)
+	if err == nil {
+		c.Close()
+		return true, nil
+	}
+	if !errors.Is(err, syscall.ECONNREFUSED) {
+		return false, fmt.Errorf("swarm probe %s: expected connect ok or ECONNREFUSED, got %w", path, err)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return false, fmt.Errorf("swarm remove dead socket %s: expected removed or already gone, got %w", path, err)
+	}
+	return false, nil
 }

@@ -1,5 +1,6 @@
 export type TabEnd = { reason: string; exitCode: number | null; signal: number | null }
-export type Tab = { id: string; label: string; end: TabEnd | null }
+// hidden: dropped from tab strips on every client, the process keeps running (re-shown from the New-session dialog).
+export type Tab = { id: string; label: string; hidden: boolean; end: TabEnd | null }
 
 const isIntOrNull = (v: unknown): v is number | null => v === null || Number.isInteger(v)
 

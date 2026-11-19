@@ -70,9 +70,14 @@ func (s *server) listTabs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slices.SortStableFunc(ts, func(a, b hc.Terminal) int { return cmp.Compare(a.CreatedMS, b.CreatedMS) })
+	home, e := s.homeDir(op)
+	if e != nil {
+		apierr.Write(w, e)
+		return
+	}
 	out := make([]Tab, 0, len(ts))
 	for _, t := range ts {
-		out = append(out, toTab(t))
+		out = append(out, toTab(home, t))
 	}
 	apierr.WriteJSON(w, http.StatusOK, out)
 }
@@ -80,6 +85,7 @@ func (s *server) listTabs(w http.ResponseWriter, r *http.Request) {
 type createRequest struct {
 	Command []string `json:"command"`
 	Label   *string  `json:"label"`
+	Cwd     string   `json:"cwd"` // relative to home
 }
 
 func (s *server) createTab(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +109,20 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	label := filepath.Base(argv[0])
+	cwd, e := s.resolveDir(op, req.Cwd)
+	if e != nil {
+		apierr.Write(w, e)
+		return
+	}
+	home, e := s.homeDir(op)
+	if e != nil {
+		apierr.Write(w, e)
+		return
+	}
+	label := "~"
+	if cwd != home {
+		label = filepath.Base(cwd)
+	}
 	if req.Label != nil {
 		label = *req.Label
 	}
@@ -116,28 +135,45 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, e)
 		return
 	}
-	t, err := c.Run(r.Context(), hc.RunParams{Argv: argv, Cwd: s.o.Home, Size: initialSize, NoParent: true,
+	t, err := c.Run(r.Context(), hc.RunParams{Argv: argv, Cwd: cwd, Size: initialSize, NoParent: true,
 		Labels: map[string]string{hc.LabelOwner: hc.LabelOwnerTab, hc.LabelName: label}})
 	if err != nil {
 		apierr.Write(w, hcError(op, "", err))
 		return
 	}
-	apierr.WriteJSON(w, http.StatusCreated, toTab(t))
+	apierr.WriteJSON(w, http.StatusCreated, toTab(home, t))
 }
 
-func (s *server) renameTab(w http.ResponseWriter, r *http.Request) {
-	const op = "tab.rename"
+// updateTab renames and/or hides a tab; hidden only drops it from clients' tab strips, the process keeps running.
+func (s *server) updateTab(w http.ResponseWriter, r *http.Request) {
+	const op = "tab.update"
 	id := r.PathValue("id")
 	var req struct {
-		Label string `json:"label"`
+		Label  *string `json:"label"`
+		Hidden *bool   `json:"hidden"`
 	}
 	if e := apierr.DecodeJSON(w, r, op, &req); e != nil {
 		e.Tab = id
 		apierr.Write(w, e)
 		return
 	}
-	if e := checkLabel(op, id, req.Label); e != nil {
-		apierr.Write(w, e)
+	labels := map[string]string{}
+	if req.Label != nil {
+		if e := checkLabel(op, id, *req.Label); e != nil {
+			apierr.Write(w, e)
+			return
+		}
+		labels[hc.LabelName] = *req.Label
+		labels[hc.LabelRenamed] = hc.LabelRenamedOn
+	}
+	if req.Hidden != nil {
+		labels[hc.LabelHidden] = "" // hc removes a label set to ""
+		if *req.Hidden {
+			labels[hc.LabelHidden] = hc.LabelHiddenOn
+		}
+	}
+	if len(labels) == 0 {
+		apierr.Write(w, badRequest(op, id, `body: expected at least one of "label" (string) or "hidden" (boolean), got neither`))
 		return
 	}
 	c, e := s.client(op, id)
@@ -149,12 +185,17 @@ func (s *server) renameTab(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, e)
 		return
 	}
-	t, err := c.Label(r.Context(), id, map[string]string{hc.LabelName: req.Label})
+	t, err := c.Label(r.Context(), id, labels)
 	if err != nil {
 		apierr.Write(w, hcError(op, id, err))
 		return
 	}
-	apierr.WriteJSON(w, http.StatusOK, toTab(t))
+	home, e := s.homeDir(op)
+	if e != nil {
+		apierr.Write(w, e)
+		return
+	}
+	apierr.WriteJSON(w, http.StatusOK, toTab(home, t))
 }
 
 func (s *server) closeTab(w http.ResponseWriter, r *http.Request) {

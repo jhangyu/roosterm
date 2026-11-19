@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { listSwarms } from "@/api/http"
 import { ApiError, type Tab } from "@/api/types"
-import { DismissIcon, PeopleTeamIcon, WindowConsoleIcon } from "@/components/icons"
+import { DismissIcon, EyeIcon, PeopleTeamIcon, WindowConsoleIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -22,6 +22,8 @@ type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreate: (request: CreateRequest) => void
+  hidden: Tab[]
+  onShow: (tab: Tab) => void
   onUnauthorized: () => void
 }
 
@@ -54,7 +56,7 @@ function Choice(props: { value: Kind; icon: ReactNode; title: string; hint: stri
 }
 
 // Mockup 3 screen 03: shell vs. swarm choice tiles, then the swarm socket list.
-export function NewSessionDialog({ open, onOpenChange, onCreate, onUnauthorized }: Props) {
+export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow, onUnauthorized }: Props) {
   const [kind, setKind] = useState<Kind>("shell")
   const [swarms, setSwarms] = useState<Swarms>({ kind: "loading" })
   const [picked, setPicked] = useState<string | null>(null)
@@ -117,6 +119,27 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, onUnauthorized 
             <Choice value="shell" icon={<WindowConsoleIcon />} title="Shell" hint="New login shell on this host" />
             <Choice value="swarm" icon={<PeopleTeamIcon />} title="Swarm" hint="Attach to a running tmux swarm socket" />
           </RadioGroup>
+
+          {/* Not in mockup 3: tabs hidden on any client; Show puts one back in the strip and attaches to it. */}
+          {hidden.length > 0 && (
+            <div className="mb-[22px]">
+              <b className="mb-2 block font-semibold">Hidden sessions</b>
+              <div className="max-h-40 overflow-y-auto rounded-md border border-grey-88">
+                {hidden.map((tab) => (
+                  <div key={tab.id} className="flex items-center gap-3 border-t border-grey-94 py-1.5 pr-1.5 pl-4 first:border-t-0">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">{tab.label}</span>
+                      <span className="block truncate font-mono text-caption text-muted-foreground">{tab.id}</span>
+                    </span>
+                    <Button variant="outline" className={BTN} onClick={() => onShow(tab)}>
+                      <EyeIcon />
+                      Show
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {kind === "swarm" && (
             <div className="mb-2 flex items-baseline justify-between">

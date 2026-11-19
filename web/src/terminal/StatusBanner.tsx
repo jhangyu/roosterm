@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { ArrowClockwiseIcon, CheckmarkCircleIcon, DismissIcon, PlugDisconnectedIcon, ServerIcon, WarningIcon } from "@/components/icons"
+import { ArrowClockwiseIcon, CheckmarkCircleIcon, DeleteIcon, PlugDisconnectedIcon, ServerIcon, WarningIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { TabEnd } from "@/api/types"
@@ -119,7 +119,7 @@ export function ExitPanel({ end, onClose, onRestart }: { end: TabEnd; onClose: (
         </Button>
       )}
       <Button type="button" className={ACTION} onClick={onClose}>
-        <DismissIcon />
+        <DeleteIcon />
         Close session
       </Button>
     </div>

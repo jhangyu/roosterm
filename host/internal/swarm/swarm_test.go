@@ -37,6 +37,43 @@ func TestListOnlyClaudeSwarmSockets(t *testing.T) {
 	}
 }
 
+func TestListRemovesDeadSockets(t *testing.T) {
+	t.Parallel()
+	dir, err := os.MkdirTemp("", "rt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	live, err := net.Listen("unix", filepath.Join(dir, "claude-swarm-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { live.Close() })
+	dead, err := net.Listen("unix", filepath.Join(dir, "claude-swarm-2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dead.(*net.UnixListener).SetUnlinkOnClose(false)
+	dead.Close()
+	plain := filepath.Join(dir, "claude-swarm-file")
+	if err := os.WriteFile(plain, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := swarm.List(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"claude-swarm-1"}; !slices.Equal(got, want) {
+		t.Fatalf("List: expected %v, got %v", want, got)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "claude-swarm-2")); !os.IsNotExist(err) {
+		t.Fatalf("dead socket file: expected removed, Lstat err %v", err)
+	}
+	if _, err := os.Stat(plain); err != nil {
+		t.Fatalf("non-socket file: expected kept, got %v", err)
+	}
+}
+
 func TestListMissingDir(t *testing.T) {
 	t.Parallel()
 	got, err := swarm.List(filepath.Join(t.TempDir(), "absent"))

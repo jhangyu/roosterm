@@ -11,6 +11,7 @@ import { KeyBar } from "./KeyBar"
 import { DESKTOP_QUERY, lineHeightForRow, readPhoneMetrics } from "./metrics"
 import { ExitPanel, StatusBanner } from "./StatusBanner"
 import { StatusFooter, type FooterInfo } from "./StatusFooter"
+import { attachTouchScroll } from "./touch-scroll"
 import { canReconnect, type PaneState } from "./pane-state"
 
 const SCROLLBACK_LINES = 5000
@@ -160,6 +161,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
       syncSize()
       if (stateRef.current.kind === "live") socketRef.current?.sendResize(cols, rows)
     })
+    const stopTouch = attachTouchScroll(term, host)
     const observer = new ResizeObserver(() => fit.fit())
     observer.observe(host)
     if (stateRef.current.kind === "connecting") connect()
@@ -168,6 +170,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
     })
     return () => {
       stopResume()
+      stopTouch()
       observer.disconnect()
       data.dispose()
       resize.dispose()
@@ -204,7 +207,8 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
             dimmed && "opacity-45 grayscale",
           )}
         >
-          <div ref={hostRef} className="h-full w-full" />
+          {/* touch-none: the drag scrolls the terminal (touch-scroll.ts), never the page. */}
+          <div ref={hostRef} className="h-full w-full touch-none" />
         </div>
         {dimmed && <div className="pointer-events-none absolute inset-0 bg-[color:var(--grey-98)]/25" />}
         <StatusFooter state={state} info={footer} />

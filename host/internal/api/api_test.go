@@ -22,6 +22,7 @@ type env struct {
 	sup      *hc.Supervisor
 	h        http.Handler
 	swarmDir string
+	home     string // symlink-resolved; t.TempDir() sits under a symlink on macOS
 }
 
 func newEnv(t *testing.T) *env {
@@ -41,8 +42,13 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	return &env{t: t, fake: f, sup: sup, swarmDir: dir,
-		h: api.New(api.Options{Core: sup, Shell: "/bin/zsh", Home: "/home/me", SwarmDir: dir})}
+	home := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &env{t: t, fake: f, sup: sup, swarmDir: dir, home: resolved,
+		h: api.New(api.Options{Core: sup, Shell: "/bin/zsh", Home: home, SwarmDir: dir})}
 }
 
 func (e *env) do(method, target, body string) *httptest.ResponseRecorder {
@@ -80,12 +86,12 @@ func TestCreateTabDefaultShell(t *testing.T) {
 		t.Fatalf("create: expected 201, got %d %s", rec.Code, rec.Body)
 	}
 	tab := decode[api.Tab](t, rec)
-	if tab.ID != "t1" || tab.Label != "zsh" || tab.Exited || tab.ExitCode != nil || tab.Reason != nil {
+	if tab.ID != "t1" || tab.Label != "~" || tab.Cwd != "" || tab.Renamed || tab.Exited || tab.ExitCode != nil || tab.Reason != nil {
 		t.Fatalf("tab: got %+v", tab)
 	}
 	term, ok := e.fake.Get("t1")
-	if !ok || !slices.Equal(term.Argv, []string{"/bin/zsh", "-l"}) || term.Cwd != "/home/me" ||
-		term.Labels[hc.LabelOwner] != hc.LabelOwnerTab || term.Labels[hc.LabelName] != "zsh" || term.Cols != 80 || term.Rows != 24 {
+	if !ok || !slices.Equal(term.Argv, []string{"/bin/zsh", "-l"}) || term.Cwd != e.home ||
+		term.Labels[hc.LabelOwner] != hc.LabelOwnerTab || term.Labels[hc.LabelName] != "~" || term.Cols != 80 || term.Rows != 24 {
 		t.Fatalf("hc terminal: got %+v", term)
 	}
 }
@@ -104,9 +110,103 @@ func TestCreateTabCommandAndLabel(t *testing.T) {
 	if !slices.Equal(term.Argv, []string{"tmux", "-L", "claude-swarm-4242", "a"}) {
 		t.Fatalf("argv: got %v", term.Argv)
 	}
-	rec = e.do("POST", "/api/tabs", `{"command":["/usr/bin/top"]}`)
-	if tab := decode[api.Tab](t, rec); tab.Label != "top" {
-		t.Fatalf("default label from argv[0]: expected top, got %q", tab.Label)
+}
+
+func TestCreateTabInFolder(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	if err := os.MkdirAll(filepath.Join(e.home, "project", "roosterm"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rec := e.do("POST", "/api/tabs", `{"command":["claude"],"cwd":"project/roosterm"}`)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d %s", rec.Code, rec.Body)
+	}
+	if tab := decode[api.Tab](t, rec); tab.Label != "roosterm" || tab.Cwd != "project/roosterm" {
+		t.Fatalf("tab: expected label roosterm cwd project/roosterm, got %+v", tab)
+	}
+	if term, _ := e.fake.Get("t1"); term.Cwd != filepath.Join(e.home, "project", "roosterm") {
+		t.Fatalf("hc cwd: expected %s, got %q", filepath.Join(e.home, "project", "roosterm"), term.Cwd)
+	}
+}
+
+func TestCreateTabBadCwdNeverReachesHC(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	if err := os.WriteFile(filepath.Join(e.home, "file"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for body, want := range map[string]int{
+		`{"cwd":"../x"}`: http.StatusBadRequest, `{"cwd":"/etc"}`: http.StatusBadRequest,
+		`{"cwd":"nope"}`: http.StatusNotFound, `{"cwd":"file"}`: http.StatusNotFound,
+	} {
+		if rec := e.do("POST", "/api/tabs", body); rec.Code != want {
+			t.Errorf("%s: expected %d, got %d %s", body, want, rec.Code, rec.Body)
+		}
+	}
+	if _, ok := e.fake.Get("t1"); ok {
+		t.Fatal("bad cwd: expected no terminal created")
+	}
+}
+
+func TestDirs(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	outside := t.TempDir()
+	for _, d := range []string{"b", "a", ".hidden", "a/inner"} {
+		if err := os.Mkdir(filepath.Join(e.home, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, target := range map[string]string{"link-in": filepath.Join(e.home, "b"), "link-out": outside, "dangling": filepath.Join(e.home, "gone")} {
+		if err := os.Symlink(target, filepath.Join(e.home, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(e.home, "c.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec := e.do("GET", "/api/dirs", "")
+	type listing struct {
+		Path    string         `json:"path"`
+		Entries []api.DirEntry `json:"entries"`
+	}
+	got := decode[listing](t, rec)
+	want := []api.DirEntry{{Name: ".hidden", Hidden: true}, {Name: "a"}, {Name: "b"}, {Name: "link-in"}}
+	if rec.Code != http.StatusOK || got.Path != "" || !slices.Equal(got.Entries, want) {
+		t.Fatalf("home listing: expected 200 %v, got %d %+v", want, rec.Code, got)
+	}
+	if got := decode[listing](t, e.do("GET", "/api/dirs?path=a", "")); got.Path != "a" || !slices.Equal(got.Entries, []api.DirEntry{{Name: "inner"}}) {
+		t.Fatalf("a listing: got %+v", got)
+	}
+	if got := decode[listing](t, e.do("GET", "/api/dirs?path=a/inner", "")); got.Entries == nil || len(got.Entries) != 0 {
+		t.Fatalf("empty dir: expected [], got %+v", got)
+	}
+	for q, want := range map[string][2]any{
+		"..": {400, "bad_request"}, "a/../b": {400, "bad_request"}, "%2Fetc": {400, "bad_request"}, "a%00": {400, "bad_request"},
+		"link-out": {403, "outside_home"}, "missing": {404, "not_found"}, "c.txt": {404, "not_found"}, "dangling": {404, "not_found"},
+	} {
+		rec := e.do("GET", "/api/dirs?path="+q, "")
+		if b := decode[errBody](t, rec).Error; rec.Code != want[0] || b.Kind != want[1] || b.Op != "dirs.list" {
+			t.Errorf("path %s: expected %v, got %d %s", q, want, rec.Code, rec.Body)
+		}
+	}
+}
+
+func TestDirsPermissionDenied(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	locked := filepath.Join(e.home, "locked")
+	if err := os.Mkdir(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+	rec := e.do("GET", "/api/dirs?path=locked", "")
+	if rec.Code != http.StatusForbidden || decode[errBody](t, rec).Error.Kind != "permission_denied" {
+		t.Fatalf("locked: expected 403 permission_denied, got %d %s", rec.Code, rec.Body)
+	}
+	if rec := e.do("POST", "/api/tabs", `{"cwd":"locked"}`); rec.Code != http.StatusCreated {
+		t.Fatalf("unlistable folder stays selectable: expected 201, got %d %s", rec.Code, rec.Body)
 	}
 }
 
@@ -143,7 +243,9 @@ func TestListTabsOnlyRoostermInOrder(t *testing.T) {
 	}
 	e.fake.Seed(hc.Terminal{Address: "x1", State: hc.StateLive, CreatedMS: 1, Labels: map[string]string{}})
 	e.fake.Seed(tabTerm("x3", 30, "c"))
-	e.fake.Seed(tabTerm("x2", 20, "b"))
+	titled := tabTerm("x2", 20, "b")
+	titled.Title, titled.Cwd = "Fix the login bug", filepath.Join(e.home, "proj")
+	e.fake.Seed(titled)
 	done := tabTerm("x4", 40, "d")
 	reason, code := "exited", 0
 	done.State, done.Reason, done.ExitCode = hc.StateFinished, &reason, &code
@@ -156,6 +258,9 @@ func TestListTabsOnlyRoostermInOrder(t *testing.T) {
 	if !slices.Equal(ids, []string{"x2", "x3", "x4"}) {
 		t.Fatalf("ids: expected [x2 x3 x4], got %v", ids)
 	}
+	if tabs[0].Title != "Fix the login bug" || tabs[0].Cwd != "proj" {
+		t.Fatalf("titled tab: expected title and cwd proj, got %+v", tabs[0])
+	}
 	last := tabs[2]
 	if !last.Exited || last.ExitCode == nil || *last.ExitCode != 0 || last.Reason == nil || *last.Reason != "exited" {
 		t.Fatalf("finished tab: got %+v", last)
@@ -166,12 +271,43 @@ func TestRenameTab(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	e.do("POST", "/api/tabs", `{}`)
+	if tabs := decode[[]api.Tab](t, e.do("GET", "/api/tabs", "")); tabs[0].Renamed {
+		t.Fatalf("new tab: expected not renamed, got %+v", tabs[0])
+	}
 	rec := e.do("PATCH", "/api/tabs/t1", `{"label":"hello world"}`)
-	if rec.Code != http.StatusOK || decode[api.Tab](t, rec).Label != "hello world" {
+	if tab := decode[api.Tab](t, rec); rec.Code != http.StatusOK || tab.Label != "hello world" || !tab.Renamed {
 		t.Fatalf("rename: expected 200 hello world, got %d %s", rec.Code, rec.Body)
 	}
 	if term, _ := e.fake.Get("t1"); term.Labels[hc.LabelName] != "hello world" || term.Labels[hc.LabelOwner] != hc.LabelOwnerTab {
 		t.Fatalf("hc labels: got %v", term.Labels)
+	}
+}
+
+func TestHideAndUnhideTab(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	e.do("POST", "/api/tabs", `{}`)
+	e.do("POST", "/api/tabs", `{}`)
+	rec := e.do("PATCH", "/api/tabs/t1", `{"hidden":true}`)
+	if rec.Code != http.StatusOK || !decode[api.Tab](t, rec).Hidden {
+		t.Fatalf("hide: expected 200 hidden, got %d %s", rec.Code, rec.Body)
+	}
+	if term, _ := e.fake.Get("t1"); term.Labels[hc.LabelHidden] != hc.LabelHiddenOn || term.State != hc.StateLive {
+		t.Fatalf("hide: expected live terminal with %s=%s, got %s %v", hc.LabelHidden, hc.LabelHiddenOn, term.State, term.Labels)
+	}
+	tabs := decode[[]api.Tab](t, e.do("GET", "/api/tabs", ""))
+	if len(tabs) != 2 || tabs[0].ID != "t1" || !tabs[0].Hidden || tabs[1].Hidden {
+		t.Fatalf("list after hide: expected [t1 hidden, t2 shown], got %+v", tabs)
+	}
+	rec = e.do("PATCH", "/api/tabs/t1", `{"hidden":false}`)
+	if rec.Code != http.StatusOK || decode[api.Tab](t, rec).Hidden {
+		t.Fatalf("unhide: expected 200 not hidden, got %d %s", rec.Code, rec.Body)
+	}
+	if term, _ := e.fake.Get("t1"); term.Labels[hc.LabelHidden] != "" || len(term.Labels) != 2 {
+		t.Fatalf("unhide: expected %s removed, got %v", hc.LabelHidden, term.Labels)
+	}
+	if rec := e.do("PATCH", "/api/tabs/t1", `{}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty patch: expected 400, got %d %s", rec.Code, rec.Body)
 	}
 }
 
@@ -205,7 +341,7 @@ func TestForeignTerminalIsNotFound(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	e.fake.Seed(hc.Terminal{Address: "x1", State: hc.StateLive, Labels: map[string]string{}})
-	for _, req := range [][3]string{{"PATCH", "/api/tabs/x1", `{"label":"a"}`}, {"DELETE", "/api/tabs/x1", ""}, {"DELETE", "/api/tabs/t999", ""}} {
+	for _, req := range [][3]string{{"PATCH", "/api/tabs/x1", `{"label":"a"}`}, {"PATCH", "/api/tabs/x1", `{"hidden":true}`}, {"DELETE", "/api/tabs/x1", ""}, {"DELETE", "/api/tabs/t999", ""}} {
 		rec := e.do(req[0], req[1], req[2])
 		if rec.Code != http.StatusNotFound || decode[errBody](t, rec).Error.Kind != "not_found" {
 			t.Errorf("%s %s: expected 404 not_found, got %d %s", req[0], req[1], rec.Code, rec.Body)

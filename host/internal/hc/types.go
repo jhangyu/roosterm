@@ -24,6 +24,7 @@ type Terminal struct {
 	CreatedMS int64             `json:"created_ms"`
 	Cols      uint16            `json:"cols"`
 	Rows      uint16            `json:"rows"`
+	Title     string            `json:"title"` // set by the program (OSC title); Claude Code writes its session summary
 }
 
 const (
@@ -33,9 +34,13 @@ const (
 
 // Tab ownership labels.
 const (
-	LabelOwner    = "roosterm"
-	LabelOwnerTab = "tab"
-	LabelName     = "roosterm.name"
+	LabelOwner     = "roosterm"
+	LabelOwnerTab  = "tab"
+	LabelName      = "roosterm.name"
+	LabelHidden    = "roosterm.hidden" // LabelHiddenOn while the tab is hidden from tab strips; absent otherwise
+	LabelHiddenOn  = "1"
+	LabelRenamed   = "roosterm.renamed" // LabelRenamedOn once the user named the tab; absent otherwise
+	LabelRenamedOn = "1"
 )
 
 // hc error kinds roosterm branches on.
