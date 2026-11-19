@@ -1,2 +1,6 @@
 scratch/
 build/
+
+web/node_modules/
+host/internal/web/dist/*
+!host/internal/web/dist/.gitkeep

@@ -1,0 +1,100 @@
+/* web/src/styles/tokens.css — the only file with raw visual values.
+   Source: docs/mockups/3-calm-surfaces.html `:root` (Fluent 2 light colors, Material 3 shape scale, Fluent type ramp).
+   Light theme only. Names the mockup shares with Tailwind's theme (--radius-*, --font-*, --text-*) are prefixed
+   --shape-*, --app-font-*, --fs-* here and mapped in globals.css. */
+:root {
+  /* Fluent 2 brand ramp (brandWeb) */
+  --brand-60: #0f548c;
+  --brand-70: #115ea3;
+  --brand-80: #0f6cbd;
+  --brand-140: #b4d6fa;
+  --brand-150: #cfe4fa;
+  --brand-160: #ebf3fc;
+
+  /* Fluent 2 neutrals (global grey) */
+  --grey-14: #242424; --grey-26: #424242; --grey-38: #616161;
+  --grey-74: #bdbdbd; --grey-82: #d1d1d1; --grey-88: #e0e0e0;
+  --grey-90: #e6e6e6; --grey-92: #ebebeb; --grey-94: #f0f0f0;
+  --grey-96: #f5f5f5; --grey-98: #fafafa;
+
+  /* shadcn semantic colors */
+  --background: #f3f3f3;
+  --foreground: var(--grey-14);
+  --card: #ffffff;
+  --card-foreground: var(--grey-14);
+  --popover: #ffffff;
+  --popover-foreground: var(--grey-14);
+  --primary: var(--brand-80);
+  --primary-hover: var(--brand-70);
+  --primary-foreground: #ffffff;
+  --secondary: var(--grey-96);
+  --secondary-foreground: var(--grey-14);
+  --muted: var(--grey-96);
+  --muted-foreground: var(--grey-38);
+  --accent: var(--brand-160);
+  --accent-foreground: var(--brand-60);
+  --border: var(--grey-88);
+  --input: var(--grey-82);
+  --ring: var(--brand-80);
+  --surface-acrylic: rgba(252, 252, 252, 0.72);
+
+  /* Fluent 2 status */
+  --destructive: #b10e1c;
+  --destructive-bg: #fdf3f4;
+  --destructive-border: #eeacb2;
+  --success: #0e700e;
+  --success-bg: #f1faf1;
+  --success-border: #9fd89f;
+  --warning: #bc4b09;
+  --warning-bg: #fff9f5;
+  --warning-border: #fdcfb4;
+
+  /* Material 3 shape scale */
+  --shape-none: 0px;
+  --shape-xs: 4px;
+  --shape-sm: 8px;
+  --shape-md: 12px;
+  --shape-lg: 16px;
+  --shape-xl: 28px;
+  --shape-full: 9999px;
+  --radius: var(--shape-md);
+
+  /* Fluent 2 elevation */
+  --elev-2: 0 0 2px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.14);
+  --elev-4: 0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14);
+  --elev-8: 0 0 2px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.14);
+  --elev-16: 0 0 2px rgba(0,0,0,.12), 0 8px 16px rgba(0,0,0,.14);
+  --elev-28: 0 0 8px rgba(0,0,0,.12), 0 14px 28px rgba(0,0,0,.14);
+  --elev-64: 0 0 8px rgba(0,0,0,.12), 0 32px 64px rgba(0,0,0,.14);
+
+  /* Typography (Fluent fontFamilyBase / fontFamilyMonospace and type ramp) */
+  --app-font-sans: 'Segoe UI Variable Text', 'Segoe UI', 'Segoe UI Web (West European)', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif;
+  --app-font-mono: 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+  --fs-caption: 12px;  --lh-caption: 16px;
+  --fs-body: 14px;     --lh-body: 20px;
+  --fs-subtitle2: 16px; --lh-subtitle2: 22px;
+  --fs-subtitle1: 20px; --lh-subtitle1: 28px;
+  --fs-title3: 24px;   --lh-title3: 32px;
+  --fs-title2: 28px;   --lh-title2: 36px;
+  --fs-term: 13px;     --lh-term: 20px;
+
+  /* Terminal metrics read by terminal-theme.ts: unitless px size, unitless line-height ratio (20/13) */
+  --terminal-font-size: 13;
+  --terminal-line-height: 1.5385;
+
+  /* Terminal light palette, hex only (xterm parses hex).
+     background, foreground, red, green, brand blue and the orange (yellow slot) come from mockup 3's --term-*.
+     The other ANSI slots are not in the mockup: Fluent 2 greys and shared-color hues chosen to read on white. */
+  --term-background: #ffffff;
+  --term-foreground: #242424;
+  --term-cursor: #0f6cbd;
+  --term-selection: #0f6cbd33;
+  --term-black: #242424;   --term-bright-black: #616161;
+  --term-red: #b10e1c;     --term-bright-red: #d13438;
+  --term-green: #0e700e;   --term-bright-green: #107c10;
+  --term-yellow: #bc4b09;  --term-bright-yellow: #d83b01;
+  --term-blue: #0f6cbd;    --term-bright-blue: #2886de;
+  --term-magenta: #8764b8; --term-bright-magenta: #b146c2;
+  --term-cyan: #00727b;    --term-bright-cyan: #038387;
+  --term-white: #bdbdbd;   --term-bright-white: #f5f5f5;
+}
