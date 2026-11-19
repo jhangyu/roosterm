@@ -28,4 +28,6 @@ Frozen 2026-11-19. Only the user may change this file.
 2 implementation rounds (user instruction). Unmet criteria after round 2 → stop and report the failure trace.
 
 ## Parking lot
-(empty)
+- WebSocket Origin check vs the user's reverse proxy: if the proxy rewrites Host, every upgrade is rejected. Needs the user's proxy behaviour; may need an allowed-origins config key.
+- Spec update: config gained a `shell` key (launchd has no `$SHELL`); spike overrides listed in the backend plan "Spec overrides" section.
+- Red runs for Tasks 2, 6, 7, 8 only proved "no implementation → build fails"; mutation checks on auth, web, api scheduled after round 2.
