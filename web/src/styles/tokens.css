@@ -83,6 +83,9 @@
   /* Terminal metrics read by terminal-theme.ts: unitless px size, unitless line-height ratio (20/13) */
   --terminal-font-size: 13;
   --terminal-line-height: 1.5385;
+  /* Phone terminal (mockup 3 `.p-term .term`: 11.5px / 17px), read by terminal/metrics.ts below the md breakpoint */
+  --terminal-font-size-phone: 11.5;
+  --terminal-line-height-phone: 1.4783;
 
   /* Terminal light palette, hex only (xterm parses hex).
      background, foreground, red, green, brand blue and the orange (yellow slot) come from mockup 3's --term-*.

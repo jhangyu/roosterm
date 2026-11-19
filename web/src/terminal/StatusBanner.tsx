@@ -98,11 +98,11 @@ export function StatusBanner({ state, onReconnect }: Props) {
 }
 
 // Mockup 3 `.exit-panel`: centred over the card, padding 14/14/14/20, gap 16, radius-lg, shadow-16.
-export function ExitPanel({ end, onClose }: { end: TabEnd; onClose: () => void }) {
+export function ExitPanel({ end, onClose, onRestart }: { end: TabEnd; onClose: () => void; onRestart?: () => void }) {
   return (
     <div
       role="status"
-      className="absolute bottom-9 left-1/2 z-10 flex -translate-x-1/2 items-center gap-4 rounded-lg bg-card py-3.5 pr-3.5 pl-5 shadow-16"
+      className="absolute bottom-[72px] left-1/2 z-10 flex -translate-x-1/2 items-center gap-4 rounded-lg bg-card py-3.5 pr-3.5 pl-5 shadow-16"
     >
       <span className="grid text-success">
         <CheckmarkCircleIcon />
@@ -111,6 +111,11 @@ export function ExitPanel({ end, onClose }: { end: TabEnd; onClose: () => void }
         <b className="block font-semibold">{endLabel(end)}</b>
         <small className="text-xs text-muted-foreground">Scrollback is kept until you close this session.</small>
       </span>
+      {onRestart && (
+        <Button type="button" variant="outline" className={ACTION} onClick={onRestart}>
+          Restart
+        </Button>
+      )}
       <Button type="button" className={ACTION} onClick={onClose}>
         <DismissIcon />
         Close session

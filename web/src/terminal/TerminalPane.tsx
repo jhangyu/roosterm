@@ -8,7 +8,9 @@ import { onResume } from "@/lib/resume"
 import { readTerminalLook } from "@/lib/terminal-theme"
 import { cn } from "@/lib/utils"
 import { KeyBar } from "./KeyBar"
+import { DESKTOP_QUERY, readPhoneMetrics } from "./metrics"
 import { ExitPanel, StatusBanner } from "./StatusBanner"
+import { StatusFooter, type FooterInfo } from "./StatusFooter"
 import { canReconnect, type PaneState } from "./pane-state"
 
 const SCROLLBACK_LINES = 5000
@@ -20,9 +22,10 @@ export type TerminalPaneProps = {
   onExited: (tabId: string, end: TabEnd) => void
   onClose: (tabId: string) => void
   onSocketLost: () => void
+  onRestart?: () => void
 }
 
-export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalPaneProps) {
+export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const socketRef = useRef<TabSocket | null>(null)
@@ -30,6 +33,8 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalP
     tab.end === null ? { kind: "connecting" } : { kind: "ended", end: { kind: "exited", end: tab.end } }
   const [state, setState] = useState<PaneState>(initial)
   const [ctrlLatched, setCtrlLatched] = useState(false)
+  const [footer, setFooter] = useState<FooterInfo>({ cols: 0, rows: 0, scrollbackLines: 0, lastOutput: null, endedAt: null })
+  const lastOutputRef = useRef<Date | null>(null)
   // Socket callbacks and the resume listener outlive renders; they read the latest state/props via refs.
   const stateRef = useRef<PaneState>(initial)
   const ctrlRef = useRef(false)
@@ -47,6 +52,10 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalP
     stateRef.current = s
     setState(s)
     if (s.kind !== "live") setCtrl(false)
+    if (s.kind === "core-offline" || s.kind === "ended") {
+      const now = new Date()
+      setFooter((f) => ({ ...f, lastOutput: lastOutputRef.current, endedAt: s.kind === "ended" && s.end.kind === "exited" ? now : f.endedAt }))
+    }
     const term = termRef.current
     if (term !== null) term.options.disableStdin = s.kind !== "live"
   }
@@ -88,7 +97,10 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalP
         setPane({ kind: "live" })
         term.focus()
       },
-      onOutput: (data) => term.write(data),
+      onOutput: (data) => {
+        lastOutputRef.current = new Date()
+        term.write(data)
+      },
       onCore: handleCore,
       onServerError: handleServerError,
       onEnd: handleEnd,
@@ -100,12 +112,33 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalP
   useEffect(() => {
     const host = hostRef.current
     if (host === null) throw new Error(`tab ${tab.id}: expected terminal host element, got none`)
-    const term = new Terminal({ ...readTerminalLook(), cursorBlink: true, scrollback: SCROLLBACK_LINES })
+    const look = readTerminalLook()
+    const phone = readPhoneMetrics()
+    const desktop = window.matchMedia(DESKTOP_QUERY)
+    const metrics = () => (desktop.matches ? look : phone)
+    const term = new Terminal({
+      ...look,
+      fontSize: metrics().fontSize,
+      lineHeight: metrics().lineHeight,
+      cursorBlink: true,
+      scrollback: SCROLLBACK_LINES,
+    })
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(host)
     fit.fit()
     termRef.current = term
+    const syncSize = () => setFooter((f) => ({ ...f, cols: term.cols, rows: term.rows }))
+    syncSize()
+    const applyMetrics = () => {
+      term.options.fontSize = metrics().fontSize
+      term.options.lineHeight = metrics().lineHeight
+      fit.fit()
+    }
+    desktop.addEventListener("change", applyMetrics)
+    const written = term.onWriteParsed(() =>
+      setFooter((f) => (f.scrollbackLines === term.buffer.active.baseY ? f : { ...f, scrollbackLines: term.buffer.active.baseY })),
+    )
     term.options.disableStdin = stateRef.current.kind !== "live"
     const data = term.onData((d) => {
       if (stateRef.current.kind !== "live") return
@@ -118,6 +151,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalP
     })
     // Not live ⇒ skip; the next attach carries the current size in its URL, so nothing is lost.
     const resize = term.onResize(({ cols, rows }) => {
+      syncSize()
       if (stateRef.current.kind === "live") socketRef.current?.sendResize(cols, rows)
     })
     const observer = new ResizeObserver(() => fit.fit())
@@ -131,6 +165,8 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalP
       observer.disconnect()
       data.dispose()
       resize.dispose()
+      written.dispose()
+      desktop.removeEventListener("change", applyMetrics)
       socketRef.current?.close()
       socketRef.current = null
       term.dispose()
@@ -165,8 +201,9 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalP
           <div ref={hostRef} className="h-full w-full" />
         </div>
         {dimmed && <div className="pointer-events-none absolute inset-0 bg-[color:var(--grey-98)]/25" />}
+        <StatusFooter state={state} info={footer} />
         {state.kind === "ended" && state.end.kind === "exited" && (
-          <ExitPanel end={state.end.end} onClose={() => onClose(tab.id)} />
+          <ExitPanel end={state.end.end} onClose={() => onClose(tab.id)} onRestart={onRestart} />
         )}
       </div>
       <KeyBar
