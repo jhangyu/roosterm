@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'fluent_icon.dart';
 import 'hosts.dart';
@@ -32,6 +33,19 @@ class _HostPageState extends State<HostPage> {
       ..loadRequest(widget.host.url);
   }
 
+  // Android: hybrid composition (a real view in the hierarchy) instead of the surface
+  // embedding, which made page animations stutter. iOS has no such setting.
+  Widget _webView() {
+    final params = PlatformWebViewWidgetCreationParams(controller: _controller.platform);
+    return WebViewWidget.fromPlatformCreationParams(
+      params: _controller.platform is AndroidWebViewController
+          ? AndroidWebViewWidgetCreationParams.fromPlatformWebViewWidgetCreationParams(
+              params,
+              displayWithHybridComposition: true)
+          : params,
+    );
+  }
+
   void _reload() {
     setState(() => _error = null);
     _controller.loadRequest(widget.host.url);
@@ -53,7 +67,7 @@ class _HostPageState extends State<HostPage> {
       child: Scaffold(
         body: SafeArea(
           child: error == null
-              ? WebViewWidget(controller: _controller)
+              ? _webView()
               : Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
