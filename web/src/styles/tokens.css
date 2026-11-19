@@ -37,7 +37,7 @@
   --input: var(--grey-82);
   --ring: var(--brand-80);
   --surface-acrylic: rgba(252, 252, 252, 0.72);
-  --mica: radial-gradient(1200px 600px at 8% -10%, rgba(207, 228, 250, .75), transparent 60%), radial-gradient(900px 520px at 100% 110%, rgba(235, 228, 245, .7), transparent 62%), radial-gradient(700px 400px at 70% 0%, rgba(253, 240, 232, .55), transparent 60%), #f3f3f3;
+  --mica: radial-gradient(1200px 600px at 8% -10%, rgba(207, 228, 250, .75), transparent 60%), radial-gradient(900px 520px at 100% 110%, rgba(235, 228, 245, .7), transparent 62%), radial-gradient(700px 400px at 70% 0%, rgba(253, 240, 232, .55), transparent 60%);
   --scrim: rgba(0,0,0,.28);
 
   /* Fluent 2 status */
@@ -80,12 +80,12 @@
   --fs-title2: 28px;   --lh-title2: 36px;
   --fs-term: 13px;     --lh-term: 20px;
 
-  /* Terminal metrics read by terminal-theme.ts: unitless px size, unitless line-height ratio (20/13) */
+  /* Terminal metrics read by terminal-theme.ts: unitless px font size and unitless px row height (mockup 13px/20px) */
   --terminal-font-size: 13;
-  --terminal-line-height: 1.5385;
+  --terminal-line-height: 20;
   /* Phone terminal (mockup 3 `.p-term .term`: 11.5px / 17px), read by terminal/metrics.ts below the md breakpoint */
   --terminal-font-size-phone: 11.5;
-  --terminal-line-height-phone: 1.4783;
+  --terminal-line-height-phone: 17;
 
   /* Terminal light palette, hex only (xterm parses hex).
      background, foreground, red, green, brand blue and the orange (yellow slot) come from mockup 3's --term-*.

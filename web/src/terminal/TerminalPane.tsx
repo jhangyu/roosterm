@@ -8,7 +8,7 @@ import { onResume } from "@/lib/resume"
 import { readTerminalLook } from "@/lib/terminal-theme"
 import { cn } from "@/lib/utils"
 import { KeyBar } from "./KeyBar"
-import { DESKTOP_QUERY, readPhoneMetrics } from "./metrics"
+import { DESKTOP_QUERY, lineHeightForRow, readPhoneMetrics } from "./metrics"
 import { ExitPanel, StatusBanner } from "./StatusBanner"
 import { StatusFooter, type FooterInfo } from "./StatusFooter"
 import { canReconnect, type PaneState } from "./pane-state"
@@ -35,6 +35,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
   const [ctrlLatched, setCtrlLatched] = useState(false)
   const [footer, setFooter] = useState<FooterInfo>({ cols: 0, rows: 0, scrollbackLines: 0, lastOutput: null, endedAt: null })
   const lastOutputRef = useRef<Date | null>(null)
+  const disconnectedAtRef = useRef<number | null>(null)
   // Socket callbacks and the resume listener outlive renders; they read the latest state/props via refs.
   const stateRef = useRef<PaneState>(initial)
   const ctrlRef = useRef(false)
@@ -62,6 +63,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
 
   const handleEnd = (end: SocketEnd) => {
     socketRef.current = null
+    disconnectedAtRef.current = end.kind === "disconnected" ? Date.now() : null
     setPane({ kind: "ended", end })
     switch (end.kind) {
       case "exited":
@@ -115,7 +117,11 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
     const look = readTerminalLook()
     const phone = readPhoneMetrics()
     const desktop = window.matchMedia(DESKTOP_QUERY)
-    const metrics = () => (desktop.matches ? look : phone)
+    // `lineHeight` in both metric sets is the target row height in px (tokens.css), converted to xterm's ratio here.
+    const metrics = () => {
+      const m = desktop.matches ? look : phone
+      return { fontSize: m.fontSize, lineHeight: lineHeightForRow(look.fontFamily, m.fontSize, m.lineHeight) }
+    }
     const term = new Terminal({
       ...look,
       fontSize: metrics().fontSize,
@@ -190,7 +196,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <StatusBanner state={state} onReconnect={connect} />
+      <StatusBanner state={state} disconnectedAt={disconnectedAtRef.current} onReconnect={connect} />
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-[var(--term-background)] shadow-8">
         <div
           className={cn(

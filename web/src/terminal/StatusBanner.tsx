@@ -31,10 +31,12 @@ function Banner(props: { tone: keyof typeof TONES; icon: ReactNode; title: strin
   )
 }
 
-type Props = { state: PaneState; onReconnect: () => void }
+type Props = { state: PaneState; disconnectedAt: number | null; onReconnect: () => void }
+
+const MS_PER_SECOND = 1000
 
 // Rendered above the terminal card. The exited state is the card overlay `ExitPanel`, not a banner.
-export function StatusBanner({ state, onReconnect }: Props) {
+export function StatusBanner({ state, disconnectedAt, onReconnect }: Props) {
   const reconnect = (
     <Button type="button" className={ACTION} onClick={onReconnect}>
       <ArrowClockwiseIcon />
@@ -88,7 +90,7 @@ export function StatusBanner({ state, onReconnect }: Props) {
           tone="warn"
           icon={<PlugDisconnectedIcon />}
           title="Connection lost"
-          detail={`Your session is still running on the host. close ${end.code}${end.reason ? ` ${end.reason}` : ""}`}
+          detail={`${location.hostname} stopped responding ${disconnectedAt === null ? 0 : Math.max(0, Math.round((Date.now() - disconnectedAt) / MS_PER_SECOND))} s ago. Your session is still running on the host. Output will resume when the connection returns.`}
           action={reconnect}
         />
       )
@@ -112,7 +114,7 @@ export function ExitPanel({ end, onClose, onRestart }: { end: TabEnd; onClose: (
         <small className="text-xs text-muted-foreground">Scrollback is kept until you close this session.</small>
       </span>
       {onRestart && (
-        <Button type="button" variant="outline" className={ACTION} onClick={onRestart}>
+        <Button type="button" variant="outline" className={cn(ACTION, "border-input bg-card")} onClick={onRestart}>
           Restart
         </Button>
       )}
