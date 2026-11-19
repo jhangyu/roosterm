@@ -36,7 +36,7 @@ export function KeyBar({ disabled, ctrlLatched, onToggleCtrl, onKey, onLetter }:
     <div
       role="toolbar"
       aria-label="Special keys"
-      className="mt-2.5 flex shrink-0 gap-1.5 overflow-x-auto border-t border-foreground/[0.06] bg-acrylic p-2.5 backdrop-blur-[30px] [scrollbar-width:none] md:hidden"
+      className="-mx-2.5 mt-2.5 flex shrink-0 gap-1.5 overflow-x-auto border-t border-foreground/[0.06] bg-acrylic p-2.5 backdrop-blur-[30px] [scrollbar-width:none] md:hidden"
     >
       {key("Escape", () => onKey("esc"), "Esc")}
       {key("Tab", () => onKey("tab"), <><KeyboardTabIcon className={ICON} />Tab</>)}
