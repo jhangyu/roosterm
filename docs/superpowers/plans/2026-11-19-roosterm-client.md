@@ -4,7 +4,7 @@
 
 **Goal:** Build the Roosterm web UI (`web/`, embedded into the Go host) and the Flutter Android shell (`app/`) in one final round, after the user picks a mockup, so a user can log in, open tabs, and run programs from a browser or the app.
 
-**Architecture:** A single-page React app talks to the host over same-origin REST (`/api/*`, `/login`) and one WebSocket per open tab (`/ws/tabs/{id}`). Only the active tab mounts an xterm.js terminal and a socket; switching tabs re-attaches, and hc sends the full screen. All visual values live in one token file; the Flutter app is a WebView around a locally stored host list.
+**Architecture:** A single-page React app talks to the host over same-origin REST (`/api/*`, `/login`, `/logout`) and one WebSocket per open tab (`/ws/tabs/{id}?cols&rows`). Only the active tab mounts an xterm.js terminal and a socket; switching tabs re-attaches, and hc sends the full screen. All visual values live in one token file; the Flutter app is a WebView around a locally stored host list.
 
 **Tech Stack:** React 19, Vite 8, TypeScript 7, Tailwind CSS 4, shadcn/ui (Radix base), lucide icons, `@xterm/xterm` 6, `@xterm/addon-fit` 0.11; Flutter 3.44 with `webview_flutter` 4.14 and `shared_preferences` 2.5.
 
@@ -18,7 +18,8 @@ Plan gate: `/Users/jhangyu/.claude/plugins/cache/jhangyu/podium/1.1.1/protocols/
 
 ## Global Constraints
 
-- Spec: `docs/superpowers/specs/2026-11-19-roosterm-design.md`. Backend plan and API owner: `docs/superpowers/plans/2026-11-19-roosterm-backend.md` §"HTTP/WS API".
+- Spec: `docs/superpowers/specs/2026-11-19-roosterm-design.md`. Backend plan and API owner: `docs/superpowers/plans/2026-11-19-roosterm-backend.md` §"HTTP/WS API" (line 50, commit `86de08a`).
+- 分頁內程式被終止而沒有結束代碼時（`exitCode` 為 null），顯示「已結束（signal N）」；兩者皆無時顯示「已結束（<reason>）」。
 - 元件一律使用 shadcn/ui 現成元件，不手刻。圖示整個介面只用同一套圖示包的同一風格 (lucide, stroke style).
 - 特殊按鍵列（Esc、Tab、Shift+Tab、Ctrl+C、Ctrl+D、方向鍵）放在網頁內，手機瀏覽器與 App 共用同一實作。No native key bar in Flutter.
 - 重新連線: on WebSocket close show「已斷線」banner with a reconnect button; auto-reconnect only on `online` and `visibilitychange` (visible). No timer retry, no backoff loop.
@@ -62,23 +63,27 @@ Shadcn-installed versions are whatever `shadcn@4.23.0 add` resolves; the impleme
 
 ## HTTP/WS API used by the client
 
-Owner: `arch-backend-opus`. Status: **PENDING RECONCILIATION** — written from spec §資料流 before the backend plan's API section existed. Every row marked *(assumed)* must be replaced by the backend plan's value before WP2 starts; only `web/src/api/*` encodes these, so a mismatch is a one-package fix.
+Owner: `arch-backend-opus`. Status: **RECONCILED** with `docs/superpowers/plans/2026-11-19-roosterm-backend.md` §"HTTP/WS API" (line 50) at commit `86de08a`. That section is authoritative; this table lists only what the client uses. All wire details are encoded in `web/src/api/*` only.
 
 | Use | Request | Response the client relies on |
 |---|---|---|
-| Log in | `POST /login`, JSON `{"username","password"}` *(assumed)* | 2xx + `Set-Cookie` (HttpOnly, Secure, SameSite=Strict, **with Max-Age** so Android WebView persists it *(assumed)*); 401 bad credentials; 429 with `Retry-After` seconds header *(assumed)* |
-| Session check | `GET /api/tabs` | 401 ⇒ show login *(assumed: no separate whoami endpoint)* |
-| List tabs | `GET /api/tabs` | `Tab[]`, `Tab = {id: string, label: string, exited: boolean, exitCode: number \| null}` *(assumed field names)* |
-| New tab | `POST /api/tabs` `{"command"?: string[]}` *(assumed)*; omitted ⇒ `$SHELL -l` | `Tab` |
-| Swarm tab | `POST /api/tabs` `{"command": ["tmux","-L",<name>,"a"]}` *(assumed; backend may prefer `{"swarm":name}`)* | `Tab` |
-| Rename | `PATCH /api/tabs/{id}` `{"label": string}` *(assumed)* | 2xx |
-| Close | `DELETE /api/tabs/{id}` | 2xx |
-| Swarms | `GET /api/swarms` | `string[]` of socket names, e.g. `"claude-swarm-4242"` *(assumed)* |
-| Errors | any non-2xx | body is text or JSON; client shows `"<op> <tabId?>: HTTP <status>: <body>"` verbatim |
-| Attach | `WS /ws/tabs/{id}` (same origin, cookie sent by browser) | server→client binary frames = terminal output (first frame = full screen); client→server binary = keystrokes; client→server text `{"type":"resize","cols":N,"rows":N}` *(assumed)* |
-| Exit | WS close code `4000` *(assumed)*, reason = decimal exit code *(assumed)* | ⇒ exited state |
-| hc core offline | WS close code `4001` *(assumed)* or text control message *(assumed)* | ⇒ banner「主機核心離線」 |
-| Logout | none in spec *(assumed absent; no logout button is planned)* | |
+| Log in | `POST /login` `{"username": string, "password": string}` | `204` + `Set-Cookie: roosterm_session=…; Path=/; Max-Age=<session_ttl s>; HttpOnly; Secure; SameSite=Strict` (Max-Age ⇒ Android WebView keeps it across restarts); `401` kind `unauthorized`; `429` kind `too_many_attempts` + header `Retry-After: <integer seconds ≥1>` |
+| Log out | `POST /logout` | `204`, cookie cleared (`Max-Age=0`) |
+| Session check | `GET /api/tabs` | `401` ⇒ show login (no whoami endpoint) |
+| List tabs | `GET /api/tabs` | `200` `Tab[]` ordered by creation; wire `Tab = {"id": string, "label": string, "exited": boolean, "exitCode": number\|null, "signal": number\|null, "reason": string\|null}`; `reason` ∈ `exited`, `killed`, `server_stop`, `host_shutdown`, `holder_lost`, `stopped_by_restart`, `null` while live |
+| New tab | `POST /api/tabs` `{"command"?: string[], "label"?: string}`; `command` omitted ⇒ `[config.shell, "-l"]`; `label` omitted ⇒ basename of argv[0]; label 1–64 chars, no control chars | `201` `Tab` |
+| Swarm tab | `POST /api/tabs` `{"command": ["tmux","-L",<name>,"a"], "label": <name>}` | `201` `Tab` |
+| Rename | `PATCH /api/tabs/{id}` `{"label": string}` | `200` `Tab` |
+| Close | `DELETE /api/tabs/{id}` (live ⇒ kill then remove) | `204` |
+| Swarms | `GET /api/swarms` | `200` sorted `string[]`, e.g. `"claude-swarm-4242"` |
+| Errors | any non-2xx JSON response | `{"error": {"op": string, "tab"?: string, "message": string, "kind": string, "hint"?: string}}`; kinds: `bad_request` (400/405/413), `unauthorized` (401), `not_found` (404, also unknown `/api/` path), `too_many_attempts` (429), `core_offline` (503), hc kinds (502), `internal` (500). A non-JSON body (e.g. a proxy page) is shown raw |
+| Attach | `WS /ws/tabs/{id}?cols=N&rows=N` (both required, 1..1000; cookie checked before upgrade ⇒ a 401/400 is seen by the browser as close `1006`) | server→client binary = output; the first binary message after each (re)attach is the full screen (starts with `\x18\x1b[!p`), written as-is, no client reset |
+| Input / resize | client→server binary = keystroke bytes (max 1 MiB); text `{"type":"resize","cols":N,"rows":N}` | — |
+| Core state | server→client text `{"type":"core","state":"offline"}` / `{"type":"core","state":"online"}`; socket stays open; after `online` a full-screen binary follows | ⇒ banner「主機核心離線」while offline, cleared on online |
+| Server error message | server→client text `{"type":"error","op","tab","kind","message"}` — sent per dropped input while offline, and before every 4400/4500 close | ⇒ shown in the banner |
+| Close codes | `4000` reason JSON `{"reason": string, "exitCode": number\|null, "signal": number\|null}` (also immediately when the tab is already finished); `4004` `tab <id> not found`; `4400` `bad message: <detail>`; `4500` hc message (≤123 bytes); `1001` `server shutdown`; anything else (e.g. `1006`) = connection lost | ⇒ exited / tab gone / protocol error / attach error / host stopping / disconnected |
+| Keepalive | server WebSocket pings every `ping_interval`; browser answers | client sends no app-level ping |
+| Dev server | `roosterm serve` default listen `127.0.0.1:8787` | Vite dev proxy target |
 
 ## File map
 
@@ -99,16 +104,21 @@ web/
 ├─ src/lib/terminal-theme.ts            WP2  reads --term-* tokens into an xterm ITheme
 ├─ src/terminal/TerminalPane.tsx        WP3  xterm + fit + socket lifecycle + states
 ├─ src/terminal/KeyBar.tsx              WP3
-├─ src/terminal/StatusBanner.tsx        WP3  disconnected / core offline / exited
+├─ src/terminal/pane-state.ts           WP3  PaneState union
+├─ src/terminal/StatusBanner.tsx        WP3  disconnected / core offline / exited / errors
+├─ public/.gitkeep                      WP1  copied by Vite into dist/ so the embed dir stays non-empty and unchanged in git
 ├─ src/App.tsx                          WP4  login gate + workspace state
 ├─ src/screens/LoginScreen.tsx          WP4
-├─ src/workspace/TabBar.tsx             WP4  tabs, rename, close
+├─ src/workspace/TabBar.tsx             WP4  tabs, rename, close, log out
 ├─ src/workspace/NewTabDialog.tsx       WP4  shell / swarm picker
 └─ src/workspace/ErrorAlert.tsx         WP4  shows ApiError verbatim
 app/                                    WP5  Flutter project (whole directory)
-scripts/build.py                        WP1  web step only (file owned by backend; see Build integration)
-.gitignore                              WP1  web/node_modules, host/internal/web/dist contents rule
+host/internal/web/dist/index.html       WP1  delete the backend placeholder (git rm); replaced by .gitkeep + build output
+host/internal/web/dist/.gitkeep         WP1  committed, empty
+.gitignore                              WP1  web/node_modules/, host/internal/web/dist/* except .gitkeep
 ```
+
+`scripts/build.py` is not touched: the backend version already runs `npm ci --prefix web` and `npm run build --prefix web` when `web/package.json` exists (backend plan line 2919).
 
 ## Token file design
 
@@ -169,24 +179,20 @@ scripts/build.py                        WP1  web step only (file owned by backen
 
 ## Build integration
 
-- Vite output directory: **`host/internal/web/dist/`** *(assumed; must equal the backend's `go:embed` directory — reconcile with the backend plan)*. Set in `web/vite.config.ts` as `build.outDir: path.resolve(__dirname, "../host/internal/web/dist")` with `build.emptyOutDir: true` (required: the dir is outside the Vite root, and Vite does not empty it by default — verified in Vite `resolveEmptyOutDir`).
-- `scripts/build.py` (owned by the backend round) runs the web step before `go build`, from the repo root, and stops on the first non-zero exit:
-  1. `npm ci --prefix web`
-  2. `npm run build --prefix web` (runs `tsc -b && vite build`)
-  3. `go build` in `host/`
-  If the backend's `build.py` already contains these two npm commands, WP1 does not touch it. If not, WP1 adds exactly these two `subprocess.run([...], check=True)` calls and nothing else; this is the only line range of a backend file the client round edits.
-- Git: built assets are not committed. Whatever placeholder the backend commits in the embed dir to keep `go build`/`go test` working without Node stays as the backend defined it *(reconcile: backend decides the placeholder file name and the `.gitignore` rule)*.
-- Dev loop: `npm run dev --prefix web` with `server.proxy` forwarding `/api` and `/login` to `http://127.0.0.1:<listen port>` and `/ws` with `ws: true` *(listen port assumed `8080`; take the real default from the backend config)*. Same-origin in production, so the client never builds absolute URLs.
+- Vite output directory: **`host/internal/web/dist/`** = the backend's `//go:embed all:dist` in `host/internal/web/static.go` (backend plan Task 6). Set in `web/vite.config.ts` as `build.outDir: path.resolve(__dirname, "../host/internal/web/dist")` with `build.emptyOutDir: true` (required: the dir is outside the Vite root, and Vite does not empty it by default — verified in Vite `resolveEmptyOutDir`).
+- `scripts/build.py` (backend-owned, unchanged by this round): if `web/package.json` exists ⇒ `npm ci --prefix web`, then `npm run build --prefix web` (runs `tsc -b && vite build`), then `go build -trimpath -o build/<name> ./cmd/roosterm` in `host/`; any non-zero RC stops the build with that RC.
+- Git: built assets are never committed. The backend placeholder `host/internal/web/dist/index.html` would be overwritten by every build (dirty tree), so WP1 replaces it: `git rm` the placeholder, commit an empty `host/internal/web/dist/.gitkeep`, add `web/public/.gitkeep` (Vite copies `public/` into `outDir`, so the emptied dir gets the same empty file back), and ignore the rest with `.gitignore` lines `host/internal/web/dist/*` and `!host/internal/web/dist/.gitkeep`. `all:dist` embeds dotfiles, so `go build`/`go test` still compile without Node; backend tests do not read the placeholder (checked: no static-route assertion in backend Task 6 tests). Mechanical check: after `python3 scripts/build.py`, `git status --porcelain host/internal/web/dist` prints nothing.
+- Dev loop: `npm run dev --prefix web` with `server.proxy` forwarding `/api`, `/login`, `/logout` to `http://127.0.0.1:8787` (backend default `listen`) and `/ws` with `ws: true`. Same-origin in production, so the client never builds absolute URLs. The session cookie is `Secure`; browsers accept it on `http://localhost`/`127.0.0.1`, so open the dev server as `http://localhost:5173`.
 
 ---
 
 ## Round structure (one final round)
 
-Preconditions to start the round: (a) the user picked a mockup, (b) the backend plan's HTTP/WS API section exists and the *(assumed)* rows above are replaced, (c) backend `host/` serves the embed dir and `/api`, `/ws`.
+Preconditions to start the round: (a) the user picked a mockup, (b) backend `host/` is implemented per `86de08a` and serves the embed dir, `/login`, `/logout`, `/api`, `/ws`.
 
 | Package | Owner files | Model | Depends on | Starts |
 |---|---|---|---|---|
-| WP1 web scaffold + tokens + build | `web/` config files, `web/src/main.tsx`, `web/src/styles/*`, `web/src/lib/utils.ts`, `web/src/components/ui/*`, `.gitignore` web lines, `scripts/build.py` web step only if missing | sonnet | — | first; mechanical, ~30 min |
+| WP1 web scaffold + tokens + build | `web/` config files, `web/public/.gitkeep`, `web/src/main.tsx`, `web/src/styles/*`, `web/src/lib/utils.ts`, `web/src/components/ui/*`, `host/internal/web/dist/{index.html (delete), .gitkeep}`, `.gitignore` web lines | sonnet | — | first; mechanical, ~30 min |
 | WP2 API + terminal libs | `web/src/api/*`, `web/src/lib/keys.ts`, `web/src/lib/resume.ts`, `web/src/lib/terminal-theme.ts` | sonnet | WP1 committed (needs `package.json`) | after WP1 |
 | WP3 terminal pane | `web/src/terminal/*` | sonnet | WP2 interfaces (frozen below); WP1 shadcn components | after WP1, parallel with WP2/WP4 |
 | WP4 shell screens | `web/src/App.tsx`, `web/src/screens/*`, `web/src/workspace/*` | sonnet | WP2, WP3 interfaces (frozen below) | after WP1, parallel with WP2/WP3 |
@@ -198,12 +204,15 @@ Serial evidence: WP2–WP4 need WP1's `package.json`, `tsconfig`, and generated 
 
 Run against a real `roosterm serve` + hc (backend contract criterion 3 setup), browser = desktop Chrome, then the same on a phone browser or the WP5 app. Record each as command/action, observed result, HEAD hash.
 
-- L1 `python3 scripts/build.py` RC=0, then `ls host/internal/web/dist/index.html` exists and the built binary serves it at `/`.
-- L2 Wrong password ⇒ error text shows HTTP 401 body; correct password ⇒ workspace with tab list.
+- L1 `python3 scripts/build.py` RC=0, then `ls host/internal/web/dist/index.html` exists, `git status --porcelain host/internal/web/dist` prints nothing, and the built binary serves the app at `/`.
+- L2 Wrong password ⇒ error text shows `unauthorized` and the server message; 5 more wrong attempts ⇒ 「嘗試次數過多，請於 N 秒後再試」; correct password (after lockout) ⇒ workspace with tab list. 登出 ⇒ login screen; reload ⇒ still login screen (cookie cleared).
 - L3 New tab ⇒ shell prompt; type `echo $$` ⇒ PID printed; `cd /tmp && pwd` ⇒ `/tmp`; run `claude` ⇒ UI renders (spec 需求 4).
 - L4 Key bar: in `cat -v`, Esc/Tab/Shift+Tab/arrows print `^[`, tab, `^[[Z`, `^[[A`…; Ctrl+C interrupts `sleep 100` (typed in the remote shell); Ctrl+D on empty prompt exits the shell ⇒ pane shows「已結束（code 0）」 and a close button that removes the tab.
 - L5 Disconnect: kill `roosterm` (SIGKILL) ⇒ banner「已斷線」appears; restart it, press 重新連線 ⇒ same tab re-attached, `echo $$` prints the same PID as L3. Toggle the machine's network off/on ⇒ reconnect happens without pressing the button.
-- L6 Swarm: with a `tmux -L claude-swarm-<n>` server running, New tab dialog lists exactly the `claude-swarm-*` sockets; picking one opens a tab attached to it.
+- L6 Swarm: with a `tmux -L claude-swarm-<n>` server running, New tab dialog lists exactly the `claude-swarm-*` sockets; picking one opens a tab labelled with the socket name, attached to it.
+- L6b Core restart: with a tab open, restart the hc core (backend live-proof procedure) ⇒ banner「主機核心離線」appears with the socket still open and the key bar disabled, then the banner clears by itself when the core is back and the screen is redrawn; `echo $$` prints the same PID.
+- L6c Killed tab: in a second browser window, close a running tab via its X ⇒ the first window's pane shows「已結束（signal N）」/ the reason (close 4000) or「分頁不存在」(close 4004) — never「協定錯誤」.
+- L6d Unknown tab: open `/ws/tabs/nope?cols=80&rows=24` from the browser console with `new WebSocket(...)` ⇒ close code 4004 (confirms the code the pane maps to「分頁不存在」).
 - L7 Grep gates: `grep -rnE "setInterval|setTimeout|sleep\(" web/src app/lib` ⇒ no matches; `grep -rnE "#[0-9a-fA-F]{3,8}\b|oklch\(|rgb\(" web/src --include=*.tsx --include=*.ts` ⇒ no matches; `grep -rn "from \"lucide-react\"" web/src | grep -v components/ui` lists only lucide imports (no other icon package in `package.json`).
 
 ---
@@ -212,7 +221,9 @@ Run against a real `roosterm serve` + hc (backend contract criterion 3 setup), b
 
 **Files:**
 - Create: `web/package.json`, `web/package-lock.json`, `web/tsconfig.json`, `web/tsconfig.app.json`, `web/tsconfig.node.json`, `web/index.html`, `web/vite.config.ts`, `web/components.json`, `web/src/main.tsx`, `web/src/styles/tokens.css`, `web/src/styles/globals.css`, `web/src/lib/utils.ts`, `web/src/components/ui/{button,input,label,card,dialog,alert-dialog,alert,badge,scroll-area}.tsx`
-- Modify: `.gitignore` (add `web/node_modules/`), `scripts/build.py` (web step, only if absent)
+- Create: `web/public/.gitkeep` (empty), `host/internal/web/dist/.gitkeep` (empty)
+- Delete: `host/internal/web/dist/index.html` (backend placeholder, `git rm`)
+- Modify: `.gitignore` (add `web/node_modules/`, `host/internal/web/dist/*`, `!host/internal/web/dist/.gitkeep`). `scripts/build.py` is not modified (already runs the web build).
 - Delete from scaffold: `web/src/App.css`, `web/src/index.css`, `web/src/assets/`, `web/public/vite.svg`, template `README.md`, `oxlint` config and dependency (no lint gate requested; dead config)
 
 **Interfaces:**
@@ -231,8 +242,9 @@ Run against a real `roosterm serve` + hc (backend contract criterion 3 setup), b
 - [ ] With a local stub `web/src/App.tsx` (`export default function App() { return null }`, not committed): `npm ci --prefix web && npm run build --prefix web` RC=0 and `host/internal/web/dist/index.html` exists.
 - [ ] `grep -c -- "--term-" web/src/styles/tokens.css` ≥ 20; `grep -nE "oklch\(|#[0-9a-fA-F]{6}" web/src/styles/globals.css` ⇒ no matches.
 - [ ] `grep -n "emptyOutDir: true" web/vite.config.ts` and `grep -n "ws: true" web/vite.config.ts` both match.
-- [ ] `scripts/build.py` contains `npm ci --prefix web` and `npm run build --prefix web` before the `go build` call (`grep -n` shows the line order).
-- [ ] `git show --stat HEAD` lists only WP1 owned paths.
+- [ ] After the stub build, `git status --porcelain host/internal/web/dist` prints nothing (`.gitkeep` restored by Vite's `public/` copy, build output ignored).
+- [ ] `cd host && go build ./... && go vet ./internal/web` RC=0 with only `.gitkeep` checked out in `dist/` (embed pattern still matches).
+- [ ] `git diff HEAD~1 --stat -- scripts/build.py` is empty; `git show --stat HEAD` lists only WP1 owned paths.
 
 **Steps:**
 
@@ -257,10 +269,10 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
-// Must equal the Go host's go:embed directory (backend plan, Build integration).
+// Must equal the Go host's `//go:embed all:dist` directory (host/internal/web/static.go).
 const EMBED_DIR = path.resolve(__dirname, "../host/internal/web/dist")
-// Default listen address of `roosterm serve` (backend config); dev server proxies to it.
-const HOST_DEV_URL = "http://127.0.0.1:8080"
+// Default `listen` of `roosterm serve` (backend config); the dev server proxies to it.
+const HOST_DEV_URL = "http://127.0.0.1:8787"
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -270,6 +282,7 @@ export default defineConfig({
     proxy: {
       "/api": HOST_DEV_URL,
       "/login": HOST_DEV_URL,
+      "/logout": HOST_DEV_URL,
       "/ws": { target: HOST_DEV_URL, ws: true },
     },
   },
@@ -321,37 +334,45 @@ if (!root) throw new Error("main: expected element #root in index.html, found no
 createRoot(root).render(<StrictMode><App /></StrictMode>)
 ```
 
-- [ ] **Step 6: Build integration**
+- [ ] **Step 6: Embed dir and ignore rules**
 
-Open `scripts/build.py`. If it lacks the web step, add before the Go build call:
-
-```python
-subprocess.run(["npm", "ci", "--prefix", "web"], check=True, cwd=ROOT)
-subprocess.run(["npm", "run", "build", "--prefix", "web"], check=True, cwd=ROOT)
+```bash
+git rm host/internal/web/dist/index.html
+touch host/internal/web/dist/.gitkeep web/public/.gitkeep
 ```
 
-(`ROOT` = the repo-root variable already used in that file; use its existing name.) Append `web/node_modules/` to `.gitignore`.
+Append to `.gitignore` with the Edit tool:
+
+```
+web/node_modules/
+host/internal/web/dist/*
+!host/internal/web/dist/.gitkeep
+```
+
+Do not edit `scripts/build.py`; confirm it already has the web step: `grep -n "npm" scripts/build.py` shows `ci --prefix web` and `run build --prefix web`.
 
 - [ ] **Step 7: Verify with a local stub, then remove it**
 
 ```bash
+cd host && go build ./... > ../scratch/wp1-go.log 2>&1; echo "RC=$?" >> ../scratch/wp1-go.log; cd ..
 printf 'export default function App() { return null }\n' > web/src/App.tsx
 npm ci --prefix web > scratch/wp1-build.log 2>&1; echo "RC=$?" >> scratch/wp1-build.log
 npm run build --prefix web >> scratch/wp1-build.log 2>&1; echo "RC=$?" >> scratch/wp1-build.log
-ls host/internal/web/dist/index.html
+ls host/internal/web/dist/index.html host/internal/web/dist/.gitkeep
+git status --porcelain host/internal/web/dist
 rm web/src/App.tsx
 ```
 
-Expected: both `RC=0` lines, `index.html` listed.
+Expected: `wp1-go.log` ends `RC=0` (Go embed compiles with only `.gitkeep`); both `RC=0` lines in `wp1-build.log`; both files listed; `git status` prints nothing. If `.gitkeep` is missing after the build (Vite did not copy the dotfile), report BLOCKED with the `ls -la host/internal/web/dist` output instead of changing `emptyOutDir`.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add web/package.json web/package-lock.json web/tsconfig.json web/tsconfig.app.json web/tsconfig.node.json web/index.html web/vite.config.ts web/components.json web/src/main.tsx web/src/styles web/src/lib/utils.ts web/src/components/ui .gitignore
-git commit -m "feat(web): scaffold Vite React shadcn app with token file" -- web .gitignore
+git add web/package.json web/package-lock.json web/tsconfig.json web/tsconfig.app.json web/tsconfig.node.json web/index.html web/vite.config.ts web/components.json web/public/.gitkeep web/src/main.tsx web/src/styles web/src/lib/utils.ts web/src/components/ui host/internal/web/dist/.gitkeep .gitignore
+git commit -m "feat(web): scaffold Vite React shadcn app with token file" -- web host/internal/web/dist .gitignore
 ```
 
-Add `scripts/build.py` to both lists only if Step 6 changed it.
+`git rm` in Step 6 already staged the placeholder deletion; the pathspec `host/internal/web/dist` includes it.
 
 ---
 
@@ -363,22 +384,28 @@ Add `scripts/build.py` to both lists only if Step 6 changed it.
 **Interfaces:**
 - Consumes: WP1 alias `@/`, CSS vars `--term-*`, `--app-font-mono`, `--terminal-font-size`, `--terminal-line-height`.
 - Produces (frozen; WP3/WP4 code against these exact names):
-  - `type Tab = { id: string; label: string; exitCode: number | null }` — `null` = running.
-  - `class ApiError extends Error { op: string; status: number; detail: string; tabId: string | undefined; retryAfter: string | null }` — `status` 0 = network failure.
-  - `login(username: string, password: string): Promise<void>`
-  - `listTabs(): Promise<Tab[]>`, `createTab(command?: string[]): Promise<Tab>`, `renameTab(id: string, label: string): Promise<void>`, `closeTab(id: string): Promise<void>`, `listSwarms(): Promise<string[]>`
-  - `type SocketEnd = { kind: "exited"; exitCode: number } | { kind: "core-offline" } | { kind: "disconnected"; code: number; reason: string } | { kind: "protocol-error"; message: string }`
-  - `type TabSocketHandlers = { onOpen: () => void; onOutput: (data: Uint8Array) => void; onEnd: (end: SocketEnd) => void }`
+  - `type TabEnd = { reason: string; exitCode: number | null; signal: number | null }`
+  - `type Tab = { id: string; label: string; end: TabEnd | null }` — `end === null` = running.
+  - `parseTabEnd(v: unknown): TabEnd | undefined` — `undefined` = shape mismatch (caller reports it).
+  - `class ApiError extends Error { op: string; status: number; kind: string | null; detail: string; tabId: string | undefined; retryAfter: string | null }` — `status` 0 = network failure; `kind` = server error kind, `null` when the body was not the JSON error shape.
+  - `login(username: string, password: string): Promise<void>`, `logout(): Promise<void>`
+  - `listTabs(): Promise<Tab[]>`, `createTab(request: { command?: string[]; label?: string }): Promise<Tab>`, `renameTab(id: string, label: string): Promise<Tab>`, `closeTab(id: string): Promise<void>`, `listSwarms(): Promise<string[]>`
+  - `type SocketEnd = { kind: "exited"; end: TabEnd } | { kind: "not-found"; reason: string } | { kind: "server-error"; code: number; detail: string } | { kind: "server-shutdown" } | { kind: "disconnected"; code: number; reason: string } | { kind: "protocol-error"; message: string }`
+  - `type CoreState = "offline" | "online"`
+  - `type TabSocketHandlers = { onOpen: () => void; onOutput: (data: Uint8Array) => void; onCore: (state: CoreState) => void; onServerError: (message: string) => void; onEnd: (end: SocketEnd) => void }`
   - `type TabSocket = { sendInput: (data: string) => void; sendResize: (cols: number, rows: number) => void; close: () => void }`
-  - `openTabSocket(tabId: string, handlers: TabSocketHandlers): TabSocket`
+  - `openTabSocket(tabId: string, size: { cols: number; rows: number }, handlers: TabSocketHandlers): TabSocket`
   - `SPECIAL_KEYS: readonly ["esc","tab","shift-tab","ctrl-c","ctrl-d","up","down","left","right"]`, `type SpecialKey`, `keySequence(key: SpecialKey, applicationCursor: boolean): string`
   - `onResume(callback: () => void): () => void` (returns unsubscribe)
   - `type TerminalLook = { theme: ITheme; fontFamily: string; fontSize: number; lineHeight: number }`, `readTerminalLook(): TerminalLook`
 
 **Behavior:**
 - All wire parsing happens here (parse, don't validate). A response that does not match the expected shape throws `ApiError` whose `detail` names the expected shape and quotes the actual JSON. Inner code trusts `Tab`.
-- Non-2xx ⇒ `ApiError(op, status, <response text>, tabId, Retry-After header)`. `fetch` rejection ⇒ `ApiError(op, 0, "network error: <message>")`.
-- `openTabSocket`: same-origin `ws:`/`wss:` from `location.protocol`; `binaryType = "arraybuffer"`; binary frame ⇒ `onOutput`; a text frame is a protocol error (close the socket, `onEnd({kind:"protocol-error"})`). Close code `CLOSE_EXITED` with a decimal reason ⇒ `exited`; a non-decimal reason ⇒ `protocol-error`; `CLOSE_CORE_OFFLINE` ⇒ `core-offline`; any other code ⇒ `disconnected`. A client-initiated `close()` never calls `onEnd`. `sendInput`/`sendResize` on a socket that is not OPEN throw (the caller gates on state; dropped keystrokes must not be silent).
+- Non-2xx ⇒ `ApiError`: body parsed as `{"error":{op,tab?,message,kind,hint?}}` ⇒ `kind` = `error.kind`, `detail` = `"<server op>: <message>"` plus `" (hint: <hint>)"` when present, `tabId` = `error.tab` or the client's tab id; a body that is not that shape ⇒ `kind: null`, `detail` = raw text (proxy pages stay visible). `Retry-After` header copied verbatim. `fetch` rejection ⇒ `ApiError(op, 0, null, "network error: <message>")`.
+- Wire `Tab` ⇒ `exited: false` ⇒ `end: null`; `exited: true` ⇒ `end` from `{reason, exitCode, signal}` (all three required; `exitCode`/`signal` integer or `null`). Same parser for the 4000 close reason.
+- `openTabSocket`: URL `ws(s)://<host>/ws/tabs/<id>?cols=<c>&rows=<r>` (scheme from `location.protocol`; the caller passes the fitted size, 1..1000 per the API); `binaryType = "arraybuffer"`; binary ⇒ `onOutput` (the first one after attach and after `core online` is the full screen; written as-is).
+- Text frames: `{"type":"core","state":"offline"|"online"}` ⇒ `onCore`; `{"type":"error",op,tab,kind,message}` ⇒ `onServerError("<op> <tab>: <kind>: <message>")` and remembered as the detail for a following 4400/4500 close; anything else (bad JSON, unknown type) ⇒ `protocol-error`, socket closed.
+- Close codes: `4000` + valid JSON reason ⇒ `exited`; `4000` + invalid reason ⇒ `protocol-error`; `4004` ⇒ `not-found`; `4400`/`4500` ⇒ `server-error` (detail = last error frame text, else close reason); `1001` ⇒ `server-shutdown`; any other code (incl. `1006` from a pre-upgrade 401/400) ⇒ `disconnected`. A client-initiated `close()` never calls `onEnd`. `sendInput`/`sendResize` on a socket that is not OPEN throw (the caller gates on state; dropped keystrokes must not be silent).
 - Key sequences: Esc `\x1b`, Tab `\t`, Shift+Tab `\x1b[Z`, Ctrl+C `\x03`, Ctrl+D `\x04`; arrows `\x1b[A/B/C/D`, or `\x1bOA/B/C/D` when the terminal is in application-cursor mode (xterm `term.modes.applicationCursorKeysMode`, verified in xterm 6 typings line 1911).
 - `onResume` fires on `window` `online` and on `document` `visibilitychange` when `visibilityState === "visible"`. No timers.
 - `readTerminalLook` throws if any token is missing or a number token is not finite (message names the variable and `tokens.css`).
@@ -386,7 +413,7 @@ Add `scripts/build.py` to both lists only if Step 6 changed it.
 **Constraints:**
 - No new dependencies. No `setTimeout`/`setInterval`.
 - `tsconfig.app.json` has `erasableSyntaxOnly: true` (create-vite 9.3.4 template): no constructor parameter properties, no enums.
-- Close-code constants and the resize message shape are the only wire details outside `http.ts`; they are named constants at the top of `tab-socket.ts`.
+- Close codes, text-frame types, and the resize message shape are the only wire details outside `http.ts`/`types.ts`; they are named constants at the top of `tab-socket.ts`.
 
 **Acceptance criteria:**
 - [ ] `npm run build --prefix web` RC=0 with WP2 files present (plus local uncommitted stubs for missing WP3/WP4 modules if those are not committed yet).
@@ -399,19 +426,32 @@ Add `scripts/build.py` to both lists only if Step 6 changed it.
 - [ ] **Step 1: `web/src/api/types.ts`**
 
 ```ts
-export type Tab = { id: string; label: string; exitCode: number | null }
+export type TabEnd = { reason: string; exitCode: number | null; signal: number | null }
+export type Tab = { id: string; label: string; end: TabEnd | null }
+
+const isIntOrNull = (v: unknown): v is number | null => v === null || Number.isInteger(v)
+
+// Shared by GET/POST/PATCH tab bodies and the WebSocket 4000 close reason.
+export function parseTabEnd(v: unknown): TabEnd | undefined {
+  if (typeof v !== "object" || v === null) return undefined
+  const { reason, exitCode, signal } = v as Record<string, unknown>
+  if (typeof reason !== "string" || !isIntOrNull(exitCode) || !isIntOrNull(signal)) return undefined
+  return { reason, exitCode, signal }
+}
 
 export class ApiError extends Error {
   readonly op: string
   readonly status: number
+  readonly kind: string | null
   readonly detail: string
   readonly tabId: string | undefined
   readonly retryAfter: string | null
 
-  constructor(op: string, status: number, detail: string, tabId?: string, retryAfter: string | null = null) {
-    super(`${op}${tabId === undefined ? "" : ` (tab ${tabId})`}: HTTP ${status}: ${detail}`)
+  constructor(op: string, status: number, kind: string | null, detail: string, tabId?: string, retryAfter: string | null = null) {
+    super(`${op}${tabId === undefined ? "" : ` (tab ${tabId})`}: HTTP ${status}${kind === null ? "" : ` ${kind}`}: ${detail}`)
     this.op = op
     this.status = status
+    this.kind = kind
     this.detail = detail
     this.tabId = tabId
     this.retryAfter = retryAfter
@@ -419,10 +459,29 @@ export class ApiError extends Error {
 }
 ```
 
-- [ ] **Step 2: `web/src/api/http.ts`** (field names follow the reconciled API table; rename here only)
+- [ ] **Step 2: `web/src/api/http.ts`**
 
 ```ts
-import { ApiError, type Tab } from "./types"
+import { ApiError, parseTabEnd, type Tab } from "./types"
+
+// Backend error body: {"error":{op,tab?,message,kind,hint?}}. Anything else (e.g. a proxy page) is shown raw.
+function errorFromBody(op: string, status: number, text: string, tabId: string | undefined, retryAfter: string | null): ApiError {
+  let body: unknown
+  try {
+    body = JSON.parse(text)
+  } catch {
+    return new ApiError(op, status, null, text, tabId, retryAfter)
+  }
+  const e = typeof body === "object" && body !== null ? (body as Record<string, unknown>).error : undefined
+  if (typeof e === "object" && e !== null) {
+    const { op: serverOp, tab, message, kind, hint } = e as Record<string, unknown>
+    if (typeof serverOp === "string" && typeof message === "string" && typeof kind === "string") {
+      const detail = `${serverOp}: ${message}${typeof hint === "string" ? ` (hint: ${hint})` : ""}`
+      return new ApiError(op, status, kind, detail, typeof tab === "string" ? tab : tabId, retryAfter)
+    }
+  }
+  return new ApiError(op, status, null, text, tabId, retryAfter)
+}
 
 async function call(op: string, method: string, path: string, body?: unknown, tabId?: string): Promise<Response> {
   let res: Response
@@ -434,23 +493,25 @@ async function call(op: string, method: string, path: string, body?: unknown, ta
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch (e) {
-    throw new ApiError(op, 0, `network error: ${e instanceof Error ? e.message : String(e)}`, tabId)
+    throw new ApiError(op, 0, null, `network error: ${e instanceof Error ? e.message : String(e)}`, tabId)
   }
-  if (!res.ok) throw new ApiError(op, res.status, await res.text(), tabId, res.headers.get("Retry-After"))
+  if (!res.ok) throw errorFromBody(op, res.status, await res.text(), tabId, res.headers.get("Retry-After"))
   return res
 }
 
-const TAB_SHAPE = "{id: string, label: string, exited: boolean, exitCode: number (when exited)}"
+const TAB_SHAPE =
+  "{id: string, label: string, exited: boolean, exitCode: int|null, signal: int|null, reason: string (when exited)}"
 
 function parseTab(op: string, status: number, v: unknown): Tab {
   if (typeof v === "object" && v !== null) {
-    const { id, label, exited, exitCode } = v as Record<string, unknown>
+    const { id, label, exited } = v as Record<string, unknown>
     if (typeof id === "string" && typeof label === "string" && typeof exited === "boolean") {
-      if (!exited) return { id, label, exitCode: null }
-      if (typeof exitCode === "number") return { id, label, exitCode }
+      if (!exited) return { id, label, end: null }
+      const end = parseTabEnd(v)
+      if (end !== undefined) return { id, label, end }
     }
   }
-  throw new ApiError(op, status, `expected ${TAB_SHAPE}, got ${JSON.stringify(v)}`)
+  throw new ApiError(op, status, null, `expected ${TAB_SHAPE}, got ${JSON.stringify(v)}`)
 }
 
 async function json(op: string, res: Response): Promise<unknown> {
@@ -458,7 +519,7 @@ async function json(op: string, res: Response): Promise<unknown> {
   try {
     return JSON.parse(text)
   } catch {
-    throw new ApiError(op, res.status, `expected JSON body, got ${JSON.stringify(text.slice(0, 200))}`)
+    throw new ApiError(op, res.status, null, `expected JSON body, got ${JSON.stringify(text.slice(0, 200))}`)
   }
 }
 
@@ -468,22 +529,28 @@ export async function login(username: string, password: string): Promise<void> {
   await call("login", "POST", "/login", { username, password })
 }
 
+export async function logout(): Promise<void> {
+  await call("logout", "POST", "/logout")
+}
+
 export async function listTabs(): Promise<Tab[]> {
   const op = "list tabs"
   const res = await call(op, "GET", "/api/tabs")
   const v = await json(op, res)
-  if (!Array.isArray(v)) throw new ApiError(op, res.status, `expected array of ${TAB_SHAPE}, got ${JSON.stringify(v)}`)
+  if (!Array.isArray(v)) throw new ApiError(op, res.status, null, `expected array of ${TAB_SHAPE}, got ${JSON.stringify(v)}`)
   return v.map((t) => parseTab(op, res.status, t))
 }
 
-export async function createTab(command?: string[]): Promise<Tab> {
+export async function createTab(request: { command?: string[]; label?: string }): Promise<Tab> {
   const op = "create tab"
-  const res = await call(op, "POST", "/api/tabs", command === undefined ? {} : { command })
+  const res = await call(op, "POST", "/api/tabs", request)
   return parseTab(op, res.status, await json(op, res))
 }
 
-export async function renameTab(id: string, label: string): Promise<void> {
-  await call("rename tab", "PATCH", tabPath(id), { label }, id)
+export async function renameTab(id: string, label: string): Promise<Tab> {
+  const op = "rename tab"
+  const res = await call(op, "PATCH", tabPath(id), { label }, id)
+  return parseTab(op, res.status, await json(op, res))
 }
 
 export async function closeTab(id: string): Promise<void> {
@@ -495,29 +562,42 @@ export async function listSwarms(): Promise<string[]> {
   const res = await call(op, "GET", "/api/swarms")
   const v = await json(op, res)
   if (!Array.isArray(v) || !v.every((s) => typeof s === "string")) {
-    throw new ApiError(op, res.status, `expected string[], got ${JSON.stringify(v)}`)
+    throw new ApiError(op, res.status, null, `expected string[], got ${JSON.stringify(v)}`)
   }
   return v
 }
 ```
 
+`JSON.stringify(request)` drops `undefined` fields, so `createTab({})` sends `{}` (backend defaults: `[shell, "-l"]`, label = basename).
+
 - [ ] **Step 3: `web/src/api/tab-socket.ts`**
 
 ```ts
-// Wire constants owned by the backend plan (HTTP/WS API section).
+import { parseTabEnd, type TabEnd } from "./types"
+
+// Wire constants owned by the backend plan (HTTP/WS API section, commit 86de08a).
 const CLOSE_EXITED = 4000
-const CLOSE_CORE_OFFLINE = 4001
+const CLOSE_NOT_FOUND = 4004
+const CLOSE_BAD_MESSAGE = 4400
+const CLOSE_HC_ERROR = 4500
+const CLOSE_GOING_AWAY = 1001
 const resizeMessage = (cols: number, rows: number) => JSON.stringify({ type: "resize", cols, rows })
 
+export type CoreState = "offline" | "online"
+
 export type SocketEnd =
-  | { kind: "exited"; exitCode: number }
-  | { kind: "core-offline" }
+  | { kind: "exited"; end: TabEnd }
+  | { kind: "not-found"; reason: string }
+  | { kind: "server-error"; code: number; detail: string }
+  | { kind: "server-shutdown" }
   | { kind: "disconnected"; code: number; reason: string }
   | { kind: "protocol-error"; message: string }
 
 export type TabSocketHandlers = {
   onOpen: () => void
   onOutput: (data: Uint8Array) => void
+  onCore: (state: CoreState) => void
+  onServerError: (message: string) => void
   onEnd: (end: SocketEnd) => void
 }
 
@@ -529,22 +609,62 @@ export type TabSocket = {
 
 const encoder = new TextEncoder()
 
-function classifyClose(tabId: string, code: number, reason: string): SocketEnd {
-  if (code === CLOSE_EXITED) {
-    if (!/^-?\d+$/.test(reason)) {
-      return { kind: "protocol-error", message: `tab ${tabId}: close ${CLOSE_EXITED} expected decimal exit code as reason, got ${JSON.stringify(reason)}` }
-    }
-    return { kind: "exited", exitCode: Number(reason) }
+type Control = { kind: "core"; state: CoreState } | { kind: "error"; message: string } | { kind: "invalid"; message: string }
+
+function parseControl(tabId: string, text: string): Control {
+  const invalid: Control = { kind: "invalid", message: `tab ${tabId}: unexpected text frame ${JSON.stringify(text.slice(0, 200))}` }
+  let v: unknown
+  try {
+    v = JSON.parse(text)
+  } catch {
+    return invalid
   }
-  if (code === CLOSE_CORE_OFFLINE) return { kind: "core-offline" }
-  return { kind: "disconnected", code, reason }
+  if (typeof v !== "object" || v === null) return invalid
+  const m = v as Record<string, unknown>
+  if (m.type === "core" && (m.state === "offline" || m.state === "online")) return { kind: "core", state: m.state }
+  if (m.type === "error" && typeof m.message === "string") {
+    return { kind: "error", message: `${String(m.op)} ${String(m.tab)}: ${String(m.kind)}: ${m.message}` }
+  }
+  return invalid
 }
 
-export function openTabSocket(tabId: string, handlers: TabSocketHandlers): TabSocket {
+function classifyClose(tabId: string, code: number, reason: string, lastError: string | null): SocketEnd {
+  switch (code) {
+    case CLOSE_EXITED: {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(reason)
+      } catch {
+        parsed = undefined
+      }
+      const end = parseTabEnd(parsed)
+      if (end === undefined) {
+        return {
+          kind: "protocol-error",
+          message: `tab ${tabId}: close ${CLOSE_EXITED} expected reason {"reason","exitCode","signal"}, got ${JSON.stringify(reason)}`,
+        }
+      }
+      return { kind: "exited", end }
+    }
+    case CLOSE_NOT_FOUND:
+      return { kind: "not-found", reason }
+    case CLOSE_BAD_MESSAGE:
+    case CLOSE_HC_ERROR:
+      return { kind: "server-error", code, detail: lastError ?? reason }
+    case CLOSE_GOING_AWAY:
+      return { kind: "server-shutdown" }
+    default:
+      return { kind: "disconnected", code, reason }
+  }
+}
+
+export function openTabSocket(tabId: string, size: { cols: number; rows: number }, handlers: TabSocketHandlers): TabSocket {
   const scheme = location.protocol === "https:" ? "wss:" : "ws:"
-  const ws = new WebSocket(`${scheme}//${location.host}/ws/tabs/${encodeURIComponent(tabId)}`)
+  const query = new URLSearchParams({ cols: String(size.cols), rows: String(size.rows) })
+  const ws = new WebSocket(`${scheme}//${location.host}/ws/tabs/${encodeURIComponent(tabId)}?${query}`)
   ws.binaryType = "arraybuffer"
   let ended = false
+  let lastError: string | null = null
   const end = (e: SocketEnd) => {
     if (ended) return
     ended = true
@@ -557,10 +677,22 @@ export function openTabSocket(tabId: string, handlers: TabSocketHandlers): TabSo
       handlers.onOutput(new Uint8Array(ev.data))
       return
     }
-    end({ kind: "protocol-error", message: `tab ${tabId}: expected binary output frame, got text ${JSON.stringify(String(ev.data).slice(0, 200))}` })
-    ws.close()
+    const c = parseControl(tabId, String(ev.data))
+    switch (c.kind) {
+      case "core":
+        handlers.onCore(c.state)
+        return
+      case "error":
+        lastError = c.message
+        handlers.onServerError(c.message)
+        return
+      case "invalid":
+        end({ kind: "protocol-error", message: c.message })
+        ws.close()
+        return
+    }
   }
-  ws.onclose = (ev) => end(classifyClose(tabId, ev.code, ev.reason))
+  ws.onclose = (ev) => end(classifyClose(tabId, ev.code, ev.reason, lastError))
 
   const requireOpen = (what: string) => {
     if (ws.readyState !== WebSocket.OPEN) {
@@ -707,21 +839,20 @@ git commit -m "feat(web): API client, tab socket, key sequences, terminal look" 
 - Create: `web/src/terminal/pane-state.ts`, `web/src/terminal/TerminalPane.tsx`, `web/src/terminal/KeyBar.tsx`, `web/src/terminal/StatusBanner.tsx`
 
 **Interfaces:**
-- Consumes: WP2 `Tab`, `openTabSocket`, `TabSocket`, `SocketEnd`, `SPECIAL_KEYS`, `SpecialKey`, `keySequence`, `onResume`, `readTerminalLook`; WP1 `@/components/ui/{button,alert}`; lucide `ArrowUp ArrowDown ArrowLeft ArrowRight WifiOff ServerOff RefreshCw X CircleAlert`.
+- Consumes: WP2 `Tab`, `TabEnd`, `openTabSocket`, `TabSocket`, `SocketEnd`, `CoreState`, `SPECIAL_KEYS`, `SpecialKey`, `keySequence`, `onResume`, `readTerminalLook`; WP1 `@/components/ui/{button,alert}`; lucide `ArrowUp ArrowDown ArrowLeft ArrowRight WifiOff ServerOff RefreshCw X CircleAlert`.
 - Produces (frozen; WP4 uses):
-  - `type TerminalPaneProps = { tab: Tab; onExited: (tabId: string, exitCode: number) => void; onClose: (tabId: string) => void; onSocketLost: () => void }`
+  - `type TerminalPaneProps = { tab: Tab; onExited: (tabId: string, end: TabEnd) => void; onClose: (tabId: string) => void; onSocketLost: () => void }`
   - `export function TerminalPane(props: TerminalPaneProps): JSX.Element` — parent MUST render it with `key={tab.id}`; one instance = one tab.
 
 **Behavior:**
-- Mount: create `Terminal` with `readTerminalLook()`, load `FitAddon`, `open()` into the host div, `fit()`, observe the host div with `ResizeObserver` ⇒ `fit()`. If `tab.exitCode !== null` show the exited state and never connect. Otherwise connect.
-- Connect: `term.reset()` (hc sends a full frame on attach), state `connecting`, `openTabSocket`. `onOpen` ⇒ state `live`, send current `cols/rows`, focus. `onOutput` ⇒ `term.write`. `onEnd`:
-  - `exited` ⇒ state exited, call `onExited(tab.id, code)`.
-  - `disconnected` ⇒ state disconnected, call `onSocketLost()` (App re-lists tabs; a 401 there sends the user to login, a vanished tab disappears).
-  - `core-offline` / `protocol-error` ⇒ matching state.
-- Input: `term.onData` ⇒ `socket.sendInput` only in state `live`; in any other state `term.options.disableStdin = true` and key-bar buttons are disabled, so no keystroke is dropped silently. `term.onResize` ⇒ `sendResize` only when live (the size is sent again on every open).
+- Mount: create `Terminal` with `readTerminalLook()`, load `FitAddon`, `open()` into the host div, `fit()`, observe the host div with `ResizeObserver` ⇒ `fit()`. If `tab.end !== null` show the ended state and never connect. Otherwise connect.
+- Connect: state `connecting`, `openTabSocket(tab.id, {cols: term.cols, rows: term.rows}, …)` (size goes in the URL). No `term.reset()`: the server's full-screen message starts with a terminal reset sequence. `onOpen` ⇒ `live`, focus. `onOutput` ⇒ `term.write`.
+- `onCore("offline")` ⇒ `core-offline` (socket stays open, input disabled); `onCore("online")` ⇒ `live` (the full screen follows by itself). `onServerError(msg)` while `core-offline` ⇒ shown as the banner notice; at other times the socket keeps it as the detail of the 4400/4500 close that follows.
+- `onEnd(end)` ⇒ state `ended`; then `exited` ⇒ `onExited(tab.id, end.end)`; `disconnected`, `not-found`, `server-shutdown` ⇒ `onSocketLost()` (App re-lists tabs: a 401 sends the user to login, a removed tab disappears).
+- Input: `term.onData` ⇒ `socket.sendInput` only in state `live`; in any other state `term.options.disableStdin = true` and key-bar buttons are disabled, so no keystroke is dropped silently. `term.onResize` ⇒ `sendResize` only when live (a new attach sends its size in the URL).
 - Key bar: `term.input(keySequence(key, term.modes.applicationCursorKeysMode), true)` — routes through `onData`, so the bar and the keyboard share one path. Buttons call `preventDefault()` on `pointerdown` so focus (and the phone keyboard) stays on the terminal.
-- Resume: `onResume` ⇒ reconnect if state is `disconnected`, `core-offline`, or `protocol-error`. Banner button「重新連線」does the same. No timer.
-- Banner texts: disconnected「已斷線」+ close code/reason; core offline「主機核心離線」; exited「已結束（code N）」+ button「關閉分頁」⇒ `onClose(tab.id)`; protocol error「協定錯誤」+ message; connecting「連線中…」.
+- Resume: `onResume` ⇒ reconnect when `canReconnect(state)` (ended, and not `exited`/`not-found`). Banner button「重新連線」does the same. No timer.
+- Banner texts (by state / end kind): connecting「連線中…」; core offline「主機核心離線」+ notice; exited `endLabel(end)` =「已結束（code N）」, else「已結束（signal N）」, else「已結束（<reason>）」+ button「關閉分頁」⇒ `onClose(tab.id)`; not-found「分頁不存在」+ reason (the re-list removes it); 4400「訊息格式錯誤」/ 4500「主機核心錯誤」+ detail + 重新連線; server-shutdown「主機服務停止」+ 重新連線; disconnected「已斷線」+ `close <code> <reason>` + 重新連線; protocol error「協定錯誤」+ message + 重新連線.
 - Unmount: close socket (client-initiated, no `onEnd`), dispose listeners and terminal.
 
 **Constraints:**
@@ -732,7 +863,7 @@ git commit -m "feat(web): API client, tab socket, key sequences, terminal look" 
 **Acceptance criteria:**
 - [ ] `npm run build --prefix web` RC=0.
 - [ ] `grep -nE "setTimeout|setInterval" web/src/terminal/*` ⇒ no matches.
-- [ ] Round live checks L3, L4, L5 pass (run by the round verifier).
+- [ ] Round live checks L3, L4, L5, L6b, L6c pass (run by the round verifier).
 - [ ] `git show --stat HEAD` lists only the four WP3 files.
 
 **Steps:**
@@ -740,16 +871,24 @@ git commit -m "feat(web): API client, tab socket, key sequences, terminal look" 
 - [ ] **Step 1: `web/src/terminal/pane-state.ts`**
 
 ```ts
+import type { TabEnd } from "@/api/types"
+import type { SocketEnd } from "@/api/tab-socket"
+
 export type PaneState =
   | { kind: "connecting" }
   | { kind: "live" }
-  | { kind: "disconnected"; detail: string }
-  | { kind: "core-offline" }
-  | { kind: "protocol-error"; message: string }
-  | { kind: "exited"; exitCode: number }
+  | { kind: "core-offline"; notice: string | null }
+  | { kind: "ended"; end: SocketEnd }
 
+// An exited or removed tab has nothing to re-attach to; every other end can be retried.
 export const canReconnect = (s: PaneState) =>
-  s.kind === "disconnected" || s.kind === "core-offline" || s.kind === "protocol-error"
+  s.kind === "ended" && s.end.kind !== "exited" && s.end.kind !== "not-found"
+
+export function endLabel(end: TabEnd): string {
+  if (end.exitCode !== null) return `已結束（code ${end.exitCode}）`
+  if (end.signal !== null) return `已結束（signal ${end.signal}）`
+  return `已結束（${end.reason}）`
+}
 ```
 
 - [ ] **Step 2: `web/src/terminal/KeyBar.tsx`**
@@ -797,12 +936,30 @@ export function KeyBar({ disabled, onKey }: { disabled: boolean; onKey: (key: Sp
 - [ ] **Step 3: `web/src/terminal/StatusBanner.tsx`**
 
 ```tsx
+import type { ReactNode } from "react"
 import { CircleAlert, RefreshCw, ServerOff, WifiOff, X } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import type { PaneState } from "./pane-state"
+import { endLabel, type PaneState } from "./pane-state"
 
 type Props = { state: PaneState; onReconnect: () => void; onClose: () => void }
+
+const BAR = "shrink-0 rounded-none border-x-0"
+const WARN = `${BAR} bg-warning text-warning-foreground`
+
+function Banner(props: { tone: "warn" | "error" | "plain"; icon?: ReactNode; title: string; detail?: string; action?: ReactNode }) {
+  const cls = props.tone === "warn" ? WARN : BAR
+  return (
+    <Alert variant={props.tone === "error" ? "destructive" : "default"} className={cls}>
+      {props.icon}
+      <AlertTitle>{props.title}</AlertTitle>
+      <AlertDescription className="flex items-center justify-between gap-2">
+        <span className="break-all">{props.detail}</span>
+        {props.action}
+      </AlertDescription>
+    </Alert>
+  )
+}
 
 export function StatusBanner({ state, onReconnect, onClose }: Props) {
   const reconnect = (
@@ -815,47 +972,43 @@ export function StatusBanner({ state, onReconnect, onClose }: Props) {
       return null
     case "connecting":
       return <p className="shrink-0 px-3 py-1 text-sm text-muted-foreground">連線中…</p>
-    case "disconnected":
-      return (
-        <Alert className="shrink-0 rounded-none border-x-0 bg-warning text-warning-foreground">
-          <WifiOff />
-          <AlertTitle>已斷線</AlertTitle>
-          <AlertDescription className="flex items-center justify-between gap-2">
-            <span>{state.detail}</span>
-            {reconnect}
-          </AlertDescription>
-        </Alert>
-      )
     case "core-offline":
-      return (
-        <Alert className="shrink-0 rounded-none border-x-0 bg-warning text-warning-foreground">
-          <ServerOff />
-          <AlertTitle>主機核心離線</AlertTitle>
-          <AlertDescription className="flex justify-end">{reconnect}</AlertDescription>
-        </Alert>
-      )
-    case "protocol-error":
-      return (
-        <Alert variant="destructive" className="shrink-0 rounded-none border-x-0">
-          <CircleAlert />
-          <AlertTitle>協定錯誤</AlertTitle>
-          <AlertDescription className="flex items-center justify-between gap-2">
-            <span>{state.message}</span>
-            {reconnect}
-          </AlertDescription>
-        </Alert>
-      )
+      return <Banner tone="warn" icon={<ServerOff />} title="主機核心離線" detail={state.notice ?? undefined} />
+  }
+  const end = state.end
+  switch (end.kind) {
     case "exited":
       return (
-        <Alert className="shrink-0 rounded-none border-x-0">
-          <AlertTitle>已結束（code {state.exitCode}）</AlertTitle>
-          <AlertDescription className="flex justify-end">
+        <Banner
+          tone="plain"
+          title={endLabel(end.end)}
+          action={
             <Button size="sm" variant="outline" onClick={onClose}>
               <X /> 關閉分頁
             </Button>
-          </AlertDescription>
-        </Alert>
+          }
+        />
       )
+    case "not-found":
+      return <Banner tone="error" icon={<CircleAlert />} title="分頁不存在" detail={end.reason} />
+    case "server-error":
+      return (
+        <Banner
+          tone="error"
+          icon={<CircleAlert />}
+          title={end.code === 4400 ? "訊息格式錯誤" : "主機核心錯誤"}
+          detail={end.detail}
+          action={reconnect}
+        />
+      )
+    case "server-shutdown":
+      return <Banner tone="warn" icon={<ServerOff />} title="主機服務停止" action={reconnect} />
+    case "disconnected":
+      return (
+        <Banner tone="warn" icon={<WifiOff />} title="已斷線" detail={`close ${end.code}${end.reason ? ` ${end.reason}` : ""}`} action={reconnect} />
+      )
+    case "protocol-error":
+      return <Banner tone="error" icon={<CircleAlert />} title="協定錯誤" detail={end.message} action={reconnect} />
   }
 }
 ```
@@ -868,8 +1021,8 @@ All lucide names used (`server-off`, `circle-alert`, `wifi-off`, `refresh-cw`, `
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
-import type { Tab } from "@/api/types"
-import { openTabSocket, type SocketEnd, type TabSocket } from "@/api/tab-socket"
+import type { Tab, TabEnd } from "@/api/types"
+import { openTabSocket, type CoreState, type SocketEnd, type TabSocket } from "@/api/tab-socket"
 import { keySequence, type SpecialKey } from "@/lib/keys"
 import { onResume } from "@/lib/resume"
 import { readTerminalLook } from "@/lib/terminal-theme"
@@ -881,7 +1034,7 @@ const SCROLLBACK_LINES = 5000
 
 export type TerminalPaneProps = {
   tab: Tab
-  onExited: (tabId: string, exitCode: number) => void
+  onExited: (tabId: string, end: TabEnd) => void
   onClose: (tabId: string) => void
   onSocketLost: () => void
 }
@@ -890,7 +1043,8 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalP
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const socketRef = useRef<TabSocket | null>(null)
-  const initial: PaneState = tab.exitCode === null ? { kind: "connecting" } : { kind: "exited", exitCode: tab.exitCode }
+  const initial: PaneState =
+    tab.end === null ? { kind: "connecting" } : { kind: "ended", end: { kind: "exited", end: tab.end } }
   const [state, setState] = useState<PaneState>(initial)
   // Socket callbacks and the resume listener outlive renders; they read the latest state/props via refs.
   const stateRef = useRef<PaneState>(initial)
@@ -908,40 +1062,46 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalP
 
   const handleEnd = (end: SocketEnd) => {
     socketRef.current = null
+    setPane({ kind: "ended", end })
     switch (end.kind) {
       case "exited":
-        setPane({ kind: "exited", exitCode: end.exitCode })
-        propsRef.current.onExited(tab.id, end.exitCode)
+        propsRef.current.onExited(tab.id, end.end)
         return
       case "disconnected":
-        setPane({ kind: "disconnected", detail: `close ${end.code}${end.reason ? ` ${end.reason}` : ""}` })
+      case "not-found":
+      case "server-shutdown":
         propsRef.current.onSocketLost()
         return
-      case "core-offline":
-        setPane({ kind: "core-offline" })
-        return
+      case "server-error":
       case "protocol-error":
-        setPane({ kind: "protocol-error", message: end.message })
         return
     }
+  }
+
+  const handleCore = (core: CoreState) => {
+    setPane(core === "offline" ? { kind: "core-offline", notice: null } : { kind: "live" })
+  }
+
+  // Shown only while the core is offline; otherwise the socket attaches it to the 4400/4500 close that follows.
+  const handleServerError = (message: string) => {
+    if (stateRef.current.kind === "core-offline") setPane({ kind: "core-offline", notice: message })
   }
 
   const connect = () => {
     const term = termRef.current
     if (term === null) throw new Error(`tab ${tab.id}: connect expected a created terminal, got none`)
     socketRef.current?.close()
-    term.reset()
     setPane({ kind: "connecting" })
-    const socket = openTabSocket(tab.id, {
+    socketRef.current = openTabSocket(tab.id, { cols: term.cols, rows: term.rows }, {
       onOpen: () => {
         setPane({ kind: "live" })
-        socket.sendResize(term.cols, term.rows)
         term.focus()
       },
       onOutput: (data) => term.write(data),
+      onCore: handleCore,
+      onServerError: handleServerError,
       onEnd: handleEnd,
     })
-    socketRef.current = socket
   }
 
   // Mount once per tab (parent uses key={tab.id}). connect/handleEnd read only refs and tab.id,
@@ -961,13 +1121,13 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost }: TerminalP
       if (socket === null) throw new Error(`tab ${tab.id}: input expected a live socket, got none`)
       socket.sendInput(d)
     })
-    // Not live ⇒ no socket; the size is sent again on the next open, so skipping here loses nothing.
+    // Not live ⇒ skip; the next attach carries the current size in its URL, so nothing is lost.
     const resize = term.onResize(({ cols, rows }) => {
       if (stateRef.current.kind === "live") socketRef.current?.sendResize(cols, rows)
     })
     const observer = new ResizeObserver(() => fit.fit())
     observer.observe(host)
-    if (stateRef.current.kind !== "exited") connect()
+    if (stateRef.current.kind === "connecting") connect()
     const stopResume = onResume(() => {
       if (canReconnect(stateRef.current)) connect()
     })
@@ -1017,11 +1177,11 @@ git commit -m "feat(web): terminal pane with key bar and reconnect banner" -- we
 - Create: `web/src/App.tsx`, `web/src/screens/LoginScreen.tsx`, `web/src/workspace/TabBar.tsx`, `web/src/workspace/NewTabDialog.tsx`, `web/src/workspace/ErrorAlert.tsx`
 
 **Interfaces:**
-- Consumes: WP2 `Tab`, `ApiError`, `login`, `listTabs`, `createTab`, `renameTab`, `closeTab`, `listSwarms`, `onResume`; WP3 `TerminalPane`, `TerminalPaneProps`; WP1 `@/components/ui/{button,input,label,card,dialog,alert-dialog,alert,badge,scroll-area}`; lucide `Plus Pencil X Terminal Users CircleAlert`.
+- Consumes: WP2 `Tab`, `TabEnd`, `ApiError`, `login`, `logout`, `listTabs`, `createTab`, `renameTab`, `closeTab`, `listSwarms`, `onResume`; WP3 `TerminalPane`, `TerminalPaneProps`; WP1 `@/components/ui/{button,input,label,card,dialog,alert-dialog,alert,badge,scroll-area}`; lucide `Plus Pencil X Terminal Users CircleAlert LogOut` (`log-out.svg` exists in the lucide pack; `LogOut` is a `lucide-react@1.75.0` export).
 - Produces: `export default function App()` (imported by WP1 `main.tsx`). Internal component props:
   - `LoginScreen: { onSignedIn: () => void }`
-  - `TabBar: { tabs: Tab[]; activeId: string | null; onSelect: (id: string) => void; onRename: (id: string, label: string) => void; onClose: (id: string) => void; onNew: () => void }`
-  - `NewTabDialog: { open: boolean; onOpenChange: (open: boolean) => void; onCreate: (command?: string[]) => void; onUnauthorized: () => void }`
+  - `TabBar: { tabs: Tab[]; activeId: string | null; onSelect: (id: string) => void; onRename: (id: string, label: string) => void; onClose: (id: string) => void; onNew: () => void; onLogout: () => void }`
+  - `NewTabDialog: { open: boolean; onOpenChange: (open: boolean) => void; onCreate: (request: { command?: string[]; label?: string }) => void; onUnauthorized: () => void }`
   - `ErrorAlert: { error: ApiError; onDismiss: () => void }`
 
 **Behavior:**
@@ -1029,8 +1189,8 @@ git commit -m "feat(web): terminal pane with key bar and reconnect banner" -- we
 - Any `ApiError` 401 from any action ⇒ login screen (session expired). Other `ApiError` ⇒ `ErrorAlert` shows `error.message` (op, tab id, status, server text) verbatim until dismissed or the next successful action. Non-`ApiError` exceptions are bugs and propagate.
 - `onResume` ⇒ `listTabs()` again (picks up tabs created or closed by another client, and detects an expired session). `TerminalPane.onSocketLost` does the same.
 - Active tab: kept if still listed, else first tab, else none (empty state with「開新分頁」).
-- Tab bar: one button per tab with label; exited tabs show a badge「已結束」. The active tab shows a rename button (Pencil ⇒ dialog with an input, submit ⇒ `renameTab`) and a close button (X). Closing a running tab asks first (AlertDialog「關閉分頁會結束其中的程式」); closing an exited tab does not ask. A trailing Plus button opens the new-tab dialog.
-- New-tab dialog: on open, `listSwarms()`. Shows「新的 shell」(Terminal icon ⇒ `onCreate()`), then one button per swarm name (Users icon ⇒ `onCreate(["tmux", "-L", name, "a"])` *(command shape per reconciled API)*). Empty list ⇒「沒有 claude-swarm-* 工作階段」. Error ⇒ inline error text; 401 ⇒ `onUnauthorized()`.
+- Tab bar: one button per tab with label; exited tabs show a badge「已結束」. The active tab shows a rename button (Pencil ⇒ dialog with an input, submit ⇒ `renameTab`) and a close button (X). Closing a running tab asks first (AlertDialog「關閉分頁會結束其中的程式」); closing an exited tab does not ask. A trailing Plus button opens the new-tab dialog; after it a LogOut button「登出」⇒ `logout()` then the login screen. Rename replaces the tab with the `Tab` the server returns.
+- New-tab dialog: on open, `listSwarms()`. Shows「新的 shell」(Terminal icon ⇒ `onCreate({})`, server picks shell and label), then one button per swarm name (Users icon ⇒ `onCreate({ command: ["tmux", "-L", name, "a"], label: name })`). Empty list ⇒「沒有 claude-swarm-* 工作階段」. Error ⇒ inline error text; 401 ⇒ `onUnauthorized()`.
 - Login: card with 帳號 / 密碼 inputs (`autoComplete="username"` / `"current-password"`), submit ⇒ `login()` then `onSignedIn()`. 401 ⇒「帳號或密碼錯誤」+ server text; 429 ⇒「嘗試次數過多，請於 {retryAfter} 秒後再試」+ server text (retryAfter absent ⇒ show the server text only, no invented number); other ⇒ `error.message`. Submit disabled while the request is in flight.
 
 **Constraints:**
@@ -1150,14 +1310,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreate: (command?: string[]) => void
+  onCreate: (request: { command?: string[]; label?: string }) => void
   onUnauthorized: () => void
 }
 
 type Swarms = { kind: "loading" } | { kind: "ready"; names: string[] } | { kind: "error"; message: string }
 
-// Swarm tab command (backend plan, HTTP/WS API: POST /api/tabs).
-const swarmCommand = (name: string) => ["tmux", "-L", name, "a"]
+// Swarm tab request (backend plan, HTTP/WS API: POST /api/tabs); the socket name doubles as the tab label.
+const swarmTab = (name: string) => ({ command: ["tmux", "-L", name, "a"], label: name })
 
 export function NewTabDialog({ open, onOpenChange, onCreate, onUnauthorized }: Props) {
   const [swarms, setSwarms] = useState<Swarms>({ kind: "loading" })
@@ -1186,7 +1346,7 @@ export function NewTabDialog({ open, onOpenChange, onCreate, onUnauthorized }: P
           <DialogTitle>開新分頁</DialogTitle>
         </DialogHeader>
         <div className="grid gap-2">
-          <Button variant="secondary" className="justify-start" onClick={() => onCreate()}>
+          <Button variant="secondary" className="justify-start" onClick={() => onCreate({})}>
             <Terminal /> 新的 shell
           </Button>
           {swarms.kind === "loading" && <p className="text-sm text-muted-foreground">讀取 swarm 清單…</p>}
@@ -1196,7 +1356,7 @@ export function NewTabDialog({ open, onOpenChange, onCreate, onUnauthorized }: P
           )}
           {swarms.kind === "ready" &&
             swarms.names.map((name) => (
-              <Button key={name} variant="outline" className="justify-start font-mono" onClick={() => onCreate(swarmCommand(name))}>
+              <Button key={name} variant="outline" className="justify-start font-mono" onClick={() => onCreate(swarmTab(name))}>
                 <Users /> {name}
               </Button>
             ))}
@@ -1211,7 +1371,7 @@ export function NewTabDialog({ open, onOpenChange, onCreate, onUnauthorized }: P
 
 ```tsx
 import { useState, type FormEvent } from "react"
-import { Pencil, Plus, X } from "lucide-react"
+import { LogOut, Pencil, Plus, X } from "lucide-react"
 import type { Tab } from "@/api/types"
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -1230,14 +1390,15 @@ type Props = {
   onRename: (id: string, label: string) => void
   onClose: (id: string) => void
   onNew: () => void
+  onLogout: () => void
 }
 
-export function TabBar({ tabs, activeId, onSelect, onRename, onClose, onNew }: Props) {
+export function TabBar({ tabs, activeId, onSelect, onRename, onClose, onNew, onLogout }: Props) {
   const [renaming, setRenaming] = useState<Tab | null>(null)
   const [draft, setDraft] = useState("")
   const [confirming, setConfirming] = useState<Tab | null>(null)
 
-  const requestClose = (tab: Tab) => (tab.exitCode === null ? setConfirming(tab) : onClose(tab.id))
+  const requestClose = (tab: Tab) => (tab.end === null ? setConfirming(tab) : onClose(tab.id))
   const submitRename = (ev: FormEvent) => {
     ev.preventDefault()
     if (renaming === null) return
@@ -1255,7 +1416,7 @@ export function TabBar({ tabs, activeId, onSelect, onRename, onClose, onNew }: P
               <div key={tab.id} className="flex shrink-0 items-center">
                 <Button size="sm" variant={active ? "secondary" : "ghost"} onClick={() => onSelect(tab.id)}>
                   {tab.label}
-                  {tab.exitCode !== null && <Badge variant="outline">已結束</Badge>}
+                  {tab.end !== null && <Badge variant="outline">已結束</Badge>}
                 </Button>
                 {active && (
                   <>
@@ -1275,6 +1436,9 @@ export function TabBar({ tabs, activeId, onSelect, onRename, onClose, onNew }: P
       </ScrollArea>
       <Button size="icon" variant="ghost" aria-label="開新分頁" onClick={onNew}>
         <Plus />
+      </Button>
+      <Button size="icon" variant="ghost" aria-label="登出" onClick={onLogout}>
+        <LogOut />
       </Button>
 
       <Dialog open={renaming !== null} onOpenChange={(o) => !o && setRenaming(null)}>
@@ -1315,8 +1479,8 @@ If the generated `scroll-area.tsx` does not export `ScrollBar`, drop the `<Scrol
 ```tsx
 import { useCallback, useEffect, useState } from "react"
 import { Plus } from "lucide-react"
-import { closeTab, createTab, listTabs, renameTab } from "@/api/http"
-import { ApiError, type Tab } from "@/api/types"
+import { closeTab, createTab, listTabs, logout, renameTab } from "@/api/http"
+import { ApiError, type Tab, type TabEnd } from "@/api/types"
 import { Button } from "@/components/ui/button"
 import { onResume } from "@/lib/resume"
 import { LoginScreen } from "@/screens/LoginScreen"
@@ -1363,9 +1527,9 @@ export default function App() {
   }, [refresh])
   useEffect(() => onResume(() => void refresh()), [refresh])
 
-  const create = (command?: string[]) =>
+  const create = (request: { command?: string[]; label?: string }) =>
     void run(async () => {
-      const tab = await createTab(command)
+      const tab = await createTab(request)
       setTabs((ts) => [...ts, tab])
       setActiveId(tab.id)
       setNewTabOpen(false)
@@ -1373,8 +1537,14 @@ export default function App() {
 
   const rename = (id: string, label: string) =>
     void run(async () => {
-      await renameTab(id, label)
-      setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, label } : t)))
+      const updated = await renameTab(id, label)
+      setTabs((ts) => ts.map((t) => (t.id === id ? updated : t)))
+    })
+
+  const signOutOfHost = () =>
+    void run(async () => {
+      await logout()
+      signOut()
     })
 
   const close = (id: string) =>
@@ -1385,8 +1555,8 @@ export default function App() {
       if (activeId === id) setActiveId(rest[0]?.id ?? null)
     })
 
-  const markExited = useCallback((id: string, exitCode: number) => {
-    setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, exitCode } : t)))
+  const markExited = useCallback((id: string, end: TabEnd) => {
+    setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, end } : t)))
   }, [])
 
   if (auth === "anonymous") return <LoginScreen onSignedIn={() => void refresh()} />
@@ -1407,7 +1577,7 @@ export default function App() {
   const active = tabs.find((t) => t.id === activeId) ?? null
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
-      <TabBar tabs={tabs} activeId={activeId} onSelect={setActiveId} onRename={rename} onClose={close} onNew={() => setNewTabOpen(true)} />
+      <TabBar tabs={tabs} activeId={activeId} onSelect={setActiveId} onRename={rename} onClose={close} onNew={() => setNewTabOpen(true)} onLogout={signOutOfHost} />
       {error !== null && <ErrorAlert error={error} onDismiss={() => setError(null)} />}
       <main className="min-h-0 flex-1">
         {active !== null ? (
@@ -1461,14 +1631,14 @@ git commit -m "feat(web): login, tab bar, new tab and swarm dialog" -- web/src/A
 - Add/edit dialog: two `TextField`s (名稱, 網址). Save runs `Host.parse`; a `FormatException` message is shown under the fields and the dialog stays open. Only `https://` with a non-empty host is accepted (Secure cookie, see Decisions).
 - Storage: `SharedPreferencesAsync`, key `hosts`, value = JSON list of `{name, url}`. Missing key ⇒ empty list (first launch). Corrupt JSON or a stored entry that fails `Host.parse` ⇒ exception shown on the list page as an error text (not swallowed, not reset).
 - Host page: full-screen `WebViewWidget` inside `SafeArea`, no app bar (maximizes terminal rows). `JavaScriptMode.unrestricted`. Android back: if `canGoBack()` ⇒ `goBack()`, else pop to the host list (`PopScope(canPop: false, onPopInvokedWithResult: …)`). Main-frame load error (`WebResourceError.isForMainFrame`, `null` treated as main frame) ⇒ error view with `description`, `errorCode`, URL and a「重新載入」button (`loadRequest(host.url)`). No automatic retry.
-- Cookies: the WebView's own cookie store (Android `CookieManager`) keeps the session cookie across app restarts; the app never reads or writes cookies. This works only if the host sets the cookie with `Max-Age`/`Expires` *(backend dependency, see API table)*.
+- Cookies: the WebView's own cookie store (Android `CookieManager`) keeps the session cookie across app restarts; the app never reads or writes cookies. This relies on the host's `Max-Age=<session_ttl>` attribute (confirmed in the backend API section); a cookie without it would be a session cookie and be lost on app restart.
 - Keyboard: `Scaffold` keeps `resizeToAvoidBottomInset: true` (default), so the web page's key bar stays above the IME. No native key bar.
 - Theme: `ThemeData(brightness: Brightness.dark, useMaterial3: true)`; the host list is not part of the mockup token swap. No icons (text buttons only), so no icon pack is involved in the app.
 
 **Constraints:**
 - Dependencies exactly: `webview_flutter: ^4.14.1`, `shared_preferences: ^2.5.6`. Nothing else beyond the SDK.
 - Android only: `flutter create --platforms android`.
-- Application id `us.jhangy.roosterm` (`--org us.jhangy`) *(default chosen by the planner; lead may override before the round)*.
+- Application id `us.jhangy.roosterm` (`--org us.jhangy`) (confirmed by the lead).
 - No timers, no polling, no `Future.delayed`.
 
 **Acceptance criteria:**
@@ -1809,15 +1979,11 @@ git commit -m "feat(app): Flutter WebView shell with host list" -- app
 
 ## Self-review
 
-1. **Spec coverage:** login (WP4), tab bar + rename + close (WP4), new tab + swarm picker (WP4), terminal view with full screen on attach (WP3), special-key bar in the web page shared by browser and app (WP3), disconnected banner + reconnect on `online`/`visibilitychange`, no timer (WP2 `onResume`, WP3), exited state「已結束（code N）」closed by the user (WP3), hc core offline banner (WP3), errors shown verbatim with op/tab/status (WP2 `ApiError`, WP4 `ErrorAlert`), 429 retry time (WP4), go:embed output + build.py (WP1), single token file (WP1), Flutter WebView + local host list + WebView cookie persistence, no native key bar (WP5), no UI tests (all). Gap: multi-client same tab "size = last change" is backend behaviour; client sends its size on every open and resize, nothing more.
-2. **Placeholder scan:** no TBD/TODO; every *(assumed)* is an API or path value owned by the backend plan, listed in "Unfinished dependencies" below.
-3. **Type consistency:** `Tab.exitCode: number | null` used in WP2 parser, WP3 initial state, WP4 tab bar/markExited; `SocketEnd` kinds match `PaneState` kinds; `TerminalPaneProps` in WP3 matches the WP4 call site; `onResume` returns an unsubscribe used directly as effect cleanup in WP3/WP4.
+1. **Spec coverage:** login and logout (WP4), tab bar + rename + close (WP4), new tab + swarm picker (WP4), terminal view with full screen on attach (WP3), special-key bar in the web page shared by browser and app (WP3), disconnected banner + reconnect on `online`/`visibilitychange`, no timer (WP2 `onResume`, WP3), ended state「已結束（code N）」(signal/reason when no code) closed by the user (WP3), hc core offline/online banner on an open socket (WP2 `onCore`, WP3), close codes 4004/4400/4500/1001 mapped to visible messages (WP2, WP3), errors shown verbatim with op/tab/status/kind/hint (WP2 `ApiError`, WP4 `ErrorAlert`), 429 retry time (WP4), go:embed output dir + clean tree after build (WP1), single token file (WP1), Flutter WebView + local host list + WebView cookie persistence (cookie has `Max-Age`), no native key bar (WP5), no UI tests (all). Multi-client "size = last change" is backend behaviour; the client sends its size on every attach (URL) and resize.
+2. **Placeholder scan:** no TBD/TODO and no *(assumed)* marker remain; every wire value is taken from the backend plan at `86de08a`.
+3. **Type consistency:** `Tab.end: TabEnd | null` used in the WP2 parser, WP3 initial state, WP4 tab bar and `markExited`; `parseTabEnd` shared by REST and the 4000 close; `SocketEnd` kinds are exactly the ones `StatusBanner` and `handleEnd` switch on; `TerminalPaneProps.onExited(tabId, end: TabEnd)` matches the WP4 call site; `createTab(request)` matches `NewTabDialog.onCreate(request)`; `renameTab` returns `Tab` and WP4 replaces the tab with it; `onResume` returns an unsubscribe used directly as effect cleanup in WP3/WP4.
 
-## Unfinished dependencies (must close before the round starts)
+## Reconciliation record
 
-- Backend API section absent when this plan was written: every *(assumed)* row in "HTTP/WS API used by the client" — login body, 429 `Retry-After`, tab JSON field names, create-tab body and swarm command shape, rename body, swarms JSON, resize message, close codes `4000`/`4001` and exit-code-in-reason, core-offline signalling, cookie `Max-Age`.
-- Embed directory `host/internal/web/dist/`, placeholder file, and `.gitignore` rule for built assets.
-- Default listen port for the Vite dev proxy (assumed `8080`).
-- Whether backend `scripts/build.py` already contains the two npm commands.
-- Android application id `us.jhangy.roosterm` (planner default).
+Reconciled against `docs/superpowers/plans/2026-11-19-roosterm-backend.md` §"HTTP/WS API" (line 50) at `86de08a`. Every former *(assumed)* row is replaced by the backend value. Changes that affected package code, not only names: 4000 reason is JSON with nullable `exitCode` (`TabEnd`, `endLabel`); core offline/online are text messages on an open socket, no 4001 (`onCore`, `core-offline` pane state); WS URL carries `?cols&rows` (size moved from first resize message to URL); error bodies are JSON (`ApiError.kind`); `POST /logout` (WP4 button); dev proxy port `8787`; `scripts/build.py` already runs the web build (WP1 no longer edits it); close codes 4004/4400/4500/1001 mapped in WP2/WP3; backend placeholder `dist/index.html` replaced by `.gitkeep` so builds leave the tree clean. Android application id stays `us.jhangy.roosterm` (lead decision).
 
