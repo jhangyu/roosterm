@@ -1,0 +1,11 @@
+[Unit]
+Description=roosterm web terminal server
+Requires=herdr-core.service
+After=herdr-core.service
+
+[Service]
+ExecStart=%h/.local/bin/roosterm serve
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

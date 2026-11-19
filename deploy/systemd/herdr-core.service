@@ -1,0 +1,10 @@
+[Unit]
+Description=herdr-core terminal holder (hc)
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=%h/.local/bin/hc server start
+
+[Install]
+WantedBy=default.target
