@@ -13,9 +13,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { endLabel } from "@/terminal/pane-state"
 import { BADGE, BADGE_IDLE, BADGE_RUN, ICON_BTN } from "./classes"
-
-// ponytail: a tab created from the swarm dialog is labelled with its socket name; a renamed swarm tab shows the shell glyph.
-const isSwarm = (tab: Tab) => tab.label.startsWith("claude-swarm-")
+import { isSwarm } from "./NewSessionDialog"
 
 // .dot / .dot.live
 function Dot({ live, className }: { live: boolean; className?: string }) {

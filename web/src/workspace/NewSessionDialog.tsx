@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react"
 import { listSwarms } from "@/api/http"
-import { ApiError } from "@/api/types"
+import { ApiError, type Tab } from "@/api/types"
 import { DismissIcon, PeopleTeamIcon, WindowConsoleIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
@@ -9,6 +9,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { BTN, BTN_PRIMARY, DIALOG, ICON_BTN } from "./classes"
 
 export type CreateRequest = { command?: string[]; label?: string }
+
+// ponytail: the API's Tab has no command, so a swarm tab is recognised by its socket-name label (as created by this dialog);
+// a renamed swarm tab is treated as a shell. Add a command field to Tab if that matters.
+export const isSwarm = (tab: Tab) => tab.label.startsWith("claude-swarm-")
+
+// Same kind and label as the given tab: swarm => re-attach to its socket; shell => server default shell, same label.
+export const restartRequest = (tab: Tab): CreateRequest => (isSwarm(tab) ? swarmTab(tab.label) : { label: tab.label })
 
 type Props = {
   open: boolean
@@ -21,7 +28,7 @@ type Kind = "shell" | "swarm"
 type Swarms = { kind: "loading" } | { kind: "ready"; names: string[] } | { kind: "error"; message: string }
 
 // Swarm tab request (backend plan, HTTP/WS API: POST /api/tabs); the socket name doubles as the tab label.
-const swarmTab = (name: string): CreateRequest => ({ command: ["tmux", "-L", name, "a"], label: name })
+export const swarmTab = (name: string): CreateRequest => ({ command: ["tmux", "-L", name, "a"], label: name })
 
 // .radio: 20px ring, grey-38, primary when checked.
 const RADIO =

@@ -8,7 +8,7 @@ import { LoginScreen } from "@/screens/LoginScreen"
 import { TerminalPane } from "@/terminal/TerminalPane"
 import { BTN_PRIMARY } from "@/workspace/classes"
 import { ErrorAlert } from "@/workspace/ErrorAlert"
-import { NewSessionDialog, type CreateRequest } from "@/workspace/NewSessionDialog"
+import { NewSessionDialog, restartRequest, type CreateRequest } from "@/workspace/NewSessionDialog"
 import { CloseConfirm, RenameDialog } from "@/workspace/SessionDialogs"
 import { MainHead, PhoneBar, SessionRail } from "@/workspace/Sessions"
 
@@ -86,6 +86,16 @@ export default function App() {
       })
     })
 
+  // Exited-panel Restart: open a session of the same kind and label, switch to it, then remove the exited one.
+  const restart = (old: Tab) =>
+    void run(async () => {
+      const tab = await createTab(restartRequest(old))
+      setTabs((ts) => [...ts, tab])
+      setActiveId(tab.id)
+      await closeTab(old.id)
+      setTabs((ts) => ts.filter((t) => t.id !== old.id))
+    })
+
   // Closing a running session asks first; an exited one closes directly.
   const requestClose = (tab: Tab) => (tab.end === null ? setConfirming(tab) : close(tab.id))
 
@@ -139,7 +149,7 @@ export default function App() {
         {error !== null && <ErrorAlert error={error} onDismiss={() => setError(null)} className="mx-2.5 mb-3.5 w-auto md:mx-0" />}
         <div className="flex min-h-0 flex-1 flex-col px-2.5 md:px-0">
           {active !== null ? (
-            <TerminalPane key={active.id} tab={active} onExited={markExited} onClose={close} onSocketLost={() => void refresh()} />
+            <TerminalPane key={active.id} tab={active} onExited={markExited} onClose={close} onSocketLost={() => void refresh()} onRestart={() => restart(active)} />
           ) : (
             // Not in mockup 3: empty state in the focused-card position.
             <div className="mb-2.5 grid flex-1 place-items-center rounded-lg bg-card shadow-8 md:mb-0">
