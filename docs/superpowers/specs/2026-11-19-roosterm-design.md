@@ -67,7 +67,7 @@ herdr-core（hc）
 ## 資料流
 1. `POST /login`：驗證帳密，發 session cookie（HttpOnly、Secure、SameSite=Strict）。之後所有 HTTP 請求與 WebSocket 升級都先驗 cookie，失敗回 401，WebSocket 在升級前就拒絕。
 2. `GET /api/tabs` → `terminal.list`。
-3. `POST /api/tabs`（可帶初始指令）→ `terminal.run`；`PATCH /api/tabs/{id}` → `terminal.label`；`DELETE /api/tabs/{id}` → `terminal.kill`。
+3. `POST /api/tabs`（可帶初始指令）→ `terminal.run`；`PATCH /api/tabs/{id}`（改名、隱藏）→ `terminal.label`；`GET /api/dirs` 列出家目錄下的資料夾；`DELETE /api/tabs/{id}` → `terminal.kill`。
 4. `GET /api/swarms` → 列出 `claude-swarm-*` socket。
 5. `WS /ws/tabs/{id}` → `terminal.attach`：先收完整一幀畫面，再收即時輸出。鍵盤輸入用 binary frame，對應 `terminal.send`；視窗大小用 JSON 控制訊息。
 6. 同一分頁可同時被多個用戶端開啟，視窗大小以最後一次變更為準。

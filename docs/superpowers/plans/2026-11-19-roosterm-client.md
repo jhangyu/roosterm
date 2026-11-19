@@ -70,10 +70,11 @@ Owner: `arch-backend-opus`. Status: **RECONCILED** with `docs/superpowers/plans/
 | Log in | `POST /login` `{"username": string, "password": string}` | `204` + `Set-Cookie: roosterm_session=…; Path=/; Max-Age=<session_ttl s>; HttpOnly; Secure; SameSite=Strict` (Max-Age ⇒ Android WebView keeps it across restarts); `401` kind `unauthorized`; `429` kind `too_many_attempts` + header `Retry-After: <integer seconds ≥1>` |
 | Log out | `POST /logout` | `204`, cookie cleared (`Max-Age=0`) |
 | Session check | `GET /api/tabs` | `401` ⇒ show login (no whoami endpoint) |
-| List tabs | `GET /api/tabs` | `200` `Tab[]` ordered by creation; wire `Tab = {"id": string, "label": string, "exited": boolean, "exitCode": number\|null, "signal": number\|null, "reason": string\|null}`; `reason` ∈ `exited`, `killed`, `server_stop`, `host_shutdown`, `holder_lost`, `stopped_by_restart`, `null` while live |
+| List tabs | `GET /api/tabs` | `200` `Tab[]` ordered by creation; wire `Tab = {"id": string, "label": string, "exited": boolean, "exitCode": number\|null, "signal": number\|null, "reason": string\|null, "hidden": boolean, "cwd": string, "title": string, "program": string, "renamed": boolean}`; `reason` ∈ `exited`, `killed`, `server_stop`, `host_shutdown`, `holder_lost`, `stopped_by_restart`, `null` while live |
 | New tab | `POST /api/tabs` `{"command"?: string[], "label"?: string}`; `command` omitted ⇒ `[config.shell, "-l"]`; `label` omitted ⇒ basename of argv[0]; label 1–64 chars, no control chars | `201` `Tab` |
 | Swarm tab | `POST /api/tabs` `{"command": ["tmux","-L",<name>,"a"], "label": <name>}` | `201` `Tab` |
-| Rename | `PATCH /api/tabs/{id}` `{"label": string}` | `200` `Tab` |
+| Rename / hide | `PATCH /api/tabs/{id}` `{"label"?: string, "hidden"?: boolean}` (at least one) | `200` `Tab` |
+| Folders | `GET /api/dirs?path=<rel to home>` | `200` `{"path", "entries": [{"name", "hidden"}]}` |
 | Close | `DELETE /api/tabs/{id}` (live ⇒ kill then remove) | `204` |
 | Swarms | `GET /api/swarms` | `200` sorted `string[]`, e.g. `"claude-swarm-4242"` |
 | Errors | any non-2xx JSON response | `{"error": {"op": string, "tab"?: string, "message": string, "kind": string, "hint"?: string}}`; kinds: `bad_request` (400/405/413), `unauthorized` (401), `not_found` (404, also unknown `/api/` path), `too_many_attempts` (429), `core_offline` (503), hc kinds (502), `internal` (500). A non-JSON body (e.g. a proxy page) is shown raw |

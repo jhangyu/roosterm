@@ -88,16 +88,17 @@
   --terminal-row-height-phone: 17;
 
   /* Terminal dark palette, hex only (xterm parses hex).
-     Dark grey background; the 16 ANSI colours are macOS Terminal.app's standard palette. */
+     Dark grey background; the 16 ANSI colours are macOS Terminal.app's standard palette, except black and blue,
+     which are lifted to stay visible on the dark background. */
   --term-background: #1e1e1e;
   --term-foreground: #e5e5e5;
   --term-cursor: #e5e5e5;
   --term-selection: #ffffff40;
-  --term-black: #000000;   --term-bright-black: #666666;
+  --term-black: #545454;   --term-bright-black: #7f7f7f;
   --term-red: #990000;     --term-bright-red: #e50000;
   --term-green: #00a600;   --term-bright-green: #00d900;
   --term-yellow: #999900;  --term-bright-yellow: #e5e500;
-  --term-blue: #0000b2;    --term-bright-blue: #0000ff;
+  --term-blue: #3b78ff;    --term-bright-blue: #6c9cff;
   --term-magenta: #b200b2; --term-bright-magenta: #e500e5;
   --term-cyan: #00a6b2;    --term-bright-cyan: #00e5e5;
   --term-white: #bfbfbf;   --term-bright-white: #e5e5e5;

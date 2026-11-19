@@ -84,8 +84,9 @@ hc-originated `message` = `<hc method>[ <tab>]: <hc message>`.
 | `POST /login` | none | `{"username":string,"password":string}` | `204`, `Set-Cookie` |
 | `POST /logout` | cookie | none | `204`, clearing `Set-Cookie`; session removed from file |
 | `GET /api/tabs` | cookie | none | `200` `Tab[]`, ordered by `created_ms` ascending |
-| `POST /api/tabs` | cookie | `{"command"?: string[], "label"?: string}` | `201` `Tab` |
-| `PATCH /api/tabs/{id}` | cookie | `{"label": string}` | `200` `Tab` |
+| `POST /api/tabs` | cookie | `{"command"?: string[], "label"?: string, "cwd"?: string}` (`cwd` relative to home) | `201` `Tab` |
+| `PATCH /api/tabs/{id}` | cookie | `{"label"?: string, "hidden"?: boolean}`, at least one (op `tab.update`; `label` sets `renamed`) | `200` `Tab` |
+| `GET /api/dirs?path=<rel>` | cookie | none | `200` `{"path": string, "entries": [{"name": string, "hidden": boolean}]}`; 400 bad path, 403 outside home or permission denied, 404 missing |
 | `DELETE /api/tabs/{id}` | cookie | none | `204` |
 | `GET /api/swarms` | cookie | none | `200` `string[]` (socket names, sorted, e.g. `"claude-swarm-4242"`) |
 | `GET /ws/tabs/{id}?cols=N&rows=N` | cookie, checked **before** upgrade | WebSocket upgrade | see below |
