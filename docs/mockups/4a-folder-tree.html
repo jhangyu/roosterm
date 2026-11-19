@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roosterm — Mockup 4a · Folder picker as an expandable tree</title>
+<!--
+  MOCKUP 4a · New-session folder picker — EXPANDABLE TREE (Fluent 2 TreeView)
+  ==========================================================================
+  Rationale
+  - One Fluent 2 TreeView rooted at "~" sits inside the New-session dialog. On open it is already expanded
+    along the remembered last path, that row is selected and scrolled to the vertical centre of the tree box.
+    Siblings of every ancestor stay visible, so "the folder next to last time's" is one click away.
+  - Above the tree, a Windows-Explorer-style address bar: a Fluent Breadcrumb of the selected path; click
+    its empty area (or Ctrl+L) to type a path; Enter expands the tree to it. Segment click = select ancestor.
+  - Row gesture: click/tap the row = select it AND expand it; the chevron alone = expand/collapse without
+    changing the selection. Double-click / Enter on a row = create the session there.
+  - Hidden (dot) folders: hidden by default, a "Hidden folders" switch reveals them (remembered with the
+    last path). Exception: the dot-folders ON the remembered path are always shown (dimmed) so a remembered
+    ~/.config/nvim still opens expanded. Why: a home dir carries 20-60 dot dirs (.cache, .npm, .Trash,
+    .local, .vscode …) that would bury the 5-10 real project roots; but ~/.config, ~/.claude are legitimate
+    working dirs, so a one-click toggle beats "never".
+  - Root is "~": the root row has no parent, the breadcrumb's first segment is fixed, a typed path outside
+    ~ is rejected inline, and symlinks resolving outside ~ show a link icon and are not selectable.
+  - Desktop: tree is inline in the 640 px dialog; hidden sessions move under the tree into a collapsed
+    accordion ("Hidden sessions · 2") so the tree keeps the height. Folder picker shows only for Shell and
+    Claude Code; for Swarm attach it collapses (a swarm socket has its own cwd).
+  - Phone (390 px): two steps inside one bottom sheet. Step 1 = session type + a "Start in" row showing the
+    remembered folder + hidden sessions + Open. Step 2 (tap "Start in") = full-height tree with 44 px rows.
+    Indentation: 12 px/level (desktop 20 px); at most 4 indent steps are drawn. Deeper than that the tree
+    REBASES: ancestors above the window fold into one pinned breadcrumb row at the top of the tree
+    ("~ › … › src › main"), rows indent relative to it. Tap a pinned segment to rebase upwards.
+  - 200+ children: rows are virtualised; a "Filter 214 folders" field appears as the first child row of any
+    folder with > 50 children (desktop: type-ahead also jumps by first letters). Phone: the field opens the
+    soft keyboard; the sheet shrinks to the visual viewport, the Use-folder bar stays above the keyboard.
+  - Tab label = "<folder> · <Claude Code summary>"; folder part is semibold and never truncated before the
+    summary; summary truncates with an ellipsis (full label in tooltip / long-press). No summary yet (or a
+    plain shell) = folder name alone. Duplicate folder names are disambiguated by the path meta line.
+
+  Skill-driven refinements (ui-ux-pro-max / design-system / frontend-design)
+  - Interaction states per the skill checklist: 150 ms hover, pressed fill, Fluent double focus ring with roving
+    tabindex, disabled = 0.45 opacity + aria-disabled + not-allowed; loading UI only after 300 ms.
+  - Phone: 40x44 chevron hit zone separate from the row's select zone; rows use min-height so large system text
+    wraps instead of clipping; path/filter inputs turn off autocapitalise/autocorrect.
+  - Component-token layer (--tree-*) + state spec table (screen 05) for hand-off; no raw hex in component rules.
+  - One signature motion: the tree unfolds depth-by-depth to the remembered folder on open (reduced-motion: off).
+
+  Material 3 corner radius mapping (md.sys.shape.corner.*)
+  - extra-large 28 px : dialog, phone bottom sheet (top corners only)
+  - large 16 px       : (unused here; terminal card stays as in mockup 3)
+  - medium 12 px      : tree box, choice tiles, phone "Start in" row, message bars, accordion, rail cards
+  - small 8 px        : tree rows (hover/selected fill, inset 4 px in the 12 px box → 12-4 = 8),
+                        address bar / filter field, buttons, phone sheet rows
+  - extra-small 4 px  : skeleton bars, count badges in rows, kbd, tooltip
+  - full              : switch track/thumb, tab chips, status dots, drag handle
+-->
+<style>
+:root {
+  --brand-60: #0f548c; --brand-70: #115ea3; --brand-80: #0f6cbd; --brand-140: #b4d6fa; --brand-150: #cfe4fa; --brand-160: #ebf3fc;
+  --grey-14: #242424; --grey-26: #424242; --grey-38: #616161; --grey-74: #bdbdbd; --grey-82: #d1d1d1; --grey-88: #e0e0e0;
+  --grey-90: #e6e6e6; --grey-92: #ebebeb; --grey-94: #f0f0f0; --grey-96: #f5f5f5; --grey-98: #fafafa;
+  --background: #f3f3f3; --foreground: var(--grey-14); --card: #fff; --popover: #fff;
+  --primary: var(--brand-80); --primary-hover: var(--brand-70); --muted-foreground: var(--grey-38);
+  --border: var(--grey-88); --input: var(--grey-82); --surface-acrylic: rgba(252,252,252,.72);
+  --destructive: #b10e1c; --destructive-bg: #fdf3f4; --destructive-border: #eeacb2;
+  --success: #0e700e; --success-bg: #f1faf1; --success-border: #9fd89f;
+  --warning: #bc4b09; --warning-bg: #fff9f5; --warning-border: #fdcfb4;
+  --info-bg: var(--brand-160); --info-border: var(--brand-150);
+  /* Material 3 shape scale */
+  --radius-xs: 4px; --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 28px; --radius-full: 9999px;
+  --shadow-2: 0 0 2px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.14);
+  --shadow-4: 0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14);
+  --shadow-8: 0 0 2px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.14);
+  --shadow-16: 0 0 2px rgba(0,0,0,.12), 0 8px 16px rgba(0,0,0,.14);
+  --shadow-28: 0 0 8px rgba(0,0,0,.12), 0 14px 28px rgba(0,0,0,.14);
+  --shadow-64: 0 0 8px rgba(0,0,0,.12), 0 32px 64px rgba(0,0,0,.14);
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', 'Segoe UI Web (West European)', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+  --text-caption: 12px; --lh-caption: 16px; --text-body: 14px; --lh-body: 20px;
+  --text-subtitle2: 16px; --lh-subtitle2: 22px; --text-subtitle1: 20px; --lh-subtitle1: 28px;
+  --dur-fast: 150ms; --curve-ease: cubic-bezier(0.33, 0, 0.67, 1); --curve-decel: cubic-bezier(0.1, 0.9, 0.2, 1);
+  --term-bg: #1e1e1e;
+  --primary-foreground: #fff;
+  --scrim: rgba(0,0,0,.28);        /* app token (tokens.css) */
+  --scrim-sheet: rgba(0,0,0,.4);   /* phone sheet: 40 % (skill checklist: 40-60 % for sheets) */
+  --opacity-disabled: .45;         /* M3/skill: disabled = 0.38-0.5 opacity + aria-disabled */
+  /* Component tokens · TreeItem (primitive → semantic → component; implementation maps these into tokens.css) */
+  --tree-row-h: 32px;  --tree-row-h-touch: 44px;
+  --tree-indent: 20px; --tree-indent-touch: 12px; --tree-indent-cap-touch: 4;
+  --tree-row-radius: var(--radius-sm);
+  --tree-row-bg-hover: var(--grey-96);
+  --tree-row-bg-pressed: var(--grey-92);
+  --tree-row-bg-selected: var(--brand-160);
+  --tree-row-fg-selected-icon: var(--primary);
+  --tree-indicator: var(--primary);
+  --tree-guide: var(--grey-90);
+  --tree-focus-ring: var(--grey-14);
+  --tree-load-delay: 300ms;        /* no loading UI if the listing answers sooner */
+  /* Tree metrics */
+  --ind: var(--tree-indent);
+  --row: var(--tree-row-h);   /* Fluent TreeItem medium */
+}
+* { box-sizing: border-box; }
+html { color-scheme: light; }
+body { margin: 0; font: var(--text-body)/var(--lh-body) var(--font-sans); color: var(--foreground); background: var(--background); -webkit-font-smoothing: antialiased; }
+svg.ic { width: 20px; height: 20px; fill: currentColor; flex: none; }
+svg.ic.sm { width: 16px; height: 16px; }
+.mono { font-family: var(--font-mono); }
+
+/* ---------- doc chrome (as mockup 3) ---------- */
+.doc { max-width: 1360px; margin: 0 auto; padding: 56px 32px 120px; }
+.eyebrow { font-size: var(--text-caption); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); font-weight: 600; }
+.doc h1 { font-size: 40px; line-height: 52px; font-weight: 600; margin: 8px 0 12px; letter-spacing: -0.01em; }
+.doc-head { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: end; margin-bottom: 56px; }
+.doc-head p { margin: 0; color: var(--grey-26); font-size: var(--text-subtitle2); line-height: 24px; max-width: 58ch; }
+.tradeoffs { background: var(--card); border-radius: var(--radius-lg); box-shadow: var(--shadow-4); padding: 20px 24px; }
+.tradeoffs h3 { margin: 0 0 8px; font-size: var(--text-subtitle2); font-weight: 600; }
+.tradeoffs ul { margin: 0; padding-left: 18px; color: var(--grey-26); }
+.tradeoffs li { margin: 6px 0; }
+.tradeoffs b { color: var(--foreground); }
+.screen { margin-bottom: 88px; }
+.screen-label { display: flex; align-items: baseline; gap: 14px; margin: 0 0 18px; flex-wrap: wrap; }
+.screen-label .num { font-family: var(--font-mono); font-size: 12px; color: var(--primary); background: var(--brand-160); border-radius: var(--radius-full); padding: 2px 10px; font-weight: 600; }
+.screen-label h2 { margin: 0; font-size: var(--text-subtitle1); line-height: var(--lh-subtitle1); font-weight: 600; }
+.screen-label .note { color: var(--muted-foreground); }
+.mica { position: relative; border-radius: var(--radius-xl); box-shadow: var(--shadow-8); overflow: hidden;
+  background: radial-gradient(1200px 600px at 8% -10%, rgba(207,228,250,.75), transparent 60%), radial-gradient(900px 520px at 100% 110%, rgba(235,228,245,.7), transparent 62%), radial-gradient(700px 400px at 70% 0%, rgba(253,240,232,.55), transparent 60%), #f3f3f3; }
+.anno { color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--lh-caption); }
+.anno b { color: var(--grey-26); }
+
+/* ---------- controls ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: var(--radius-sm); white-space: nowrap;
+  font: 600 var(--text-body)/var(--lh-body) var(--font-sans); border: 1px solid var(--input); background: var(--card); color: var(--foreground); cursor: pointer; }
+.btn.primary { background: var(--primary); border-color: transparent; color: var(--primary-foreground); }
+.btn.subtle { background: transparent; border-color: transparent; }
+.btn.sm { height: 28px; padding: 0 10px; font-size: var(--text-caption); }
+.btn.lg { height: 48px; font-size: var(--text-subtitle2); }
+.btn.block { width: 100%; }
+.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-sm); border: 0; background: transparent; color: var(--grey-26); cursor: pointer; flex: none; }
+.icon-btn.t44 { width: 44px; height: 44px; }
+.icon-btn.on { background: var(--brand-160); color: var(--primary); }
+.radio { width: 20px; height: 20px; border-radius: var(--radius-full); border: 1px solid var(--grey-38); display: grid; place-items: center; background: var(--card); flex: none; }
+.radio.on { border-color: var(--primary); }
+.radio.on::after { content: ""; width: 10px; height: 10px; border-radius: var(--radius-full); background: var(--primary); }
+.switch { display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-caption); color: var(--grey-26); white-space: nowrap; }
+.switch i { width: 40px; height: 20px; border-radius: var(--radius-full); border: 1px solid var(--grey-38); position: relative; background: var(--card); flex: none; }
+.switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: var(--radius-full); background: var(--grey-38); }
+.switch.on i { background: var(--primary); border-color: transparent; }
+.switch.on i::after { left: 23px; background: var(--card); }
+kbd { font-family: var(--font-mono); font-size: 11px; color: var(--grey-38); border: 1px solid var(--grey-88); border-bottom-width: 2px; border-radius: var(--radius-xs); padding: 0 5px; background: var(--card); }
+.spinner { width: 16px; height: 16px; border-radius: var(--radius-full); border: 2px solid var(--brand-150); border-top-color: var(--primary); animation: spin 1s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- dialog (mockup 3 screen 03, widened to 640) ---------- */
+.dialog-stage { min-height: 860px; display: grid; place-items: center; padding: 40px 0; }
+.ghost { position: absolute; inset: 0; display: grid; grid-template-columns: 288px 1fr; }
+.ghost .g-rail { background: var(--surface-acrylic); border-right: 1px solid rgba(0,0,0,.06); }
+.ghost .g-card { margin: 92px 28px 28px; background: var(--term-bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-8); }
+.scrim { position: absolute; inset: 0; background: var(--scrim); z-index: 1; }
+.dialog { position: relative; z-index: 2; width: 640px; background: var(--popover); border-radius: var(--radius-xl); box-shadow: var(--shadow-64); padding: 28px 28px 24px; }
+.dialog-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
+.dialog h3 { margin: 0; font-size: var(--text-subtitle1); line-height: var(--lh-subtitle1); font-weight: 600; }
+.dialog .lead { margin: 0 0 20px; color: var(--muted-foreground); }
+.choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+.choice { display: grid; grid-template-columns: 36px 1fr 20px; gap: 10px; align-items: start; padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--grey-88); background: var(--card); text-align: left; }
+.choice .glyph { width: 36px; height: 36px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--grey-94); color: var(--grey-26); }
+.choice b { display: block; font-weight: 600; }
+.choice small { color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--lh-caption); }
+.choice.selected { border: 2px solid var(--primary); padding: 13px; background: var(--brand-160); }
+.choice.selected .glyph { background: var(--card); color: var(--primary); }
+.section-label { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; gap: 12px; }
+.section-label b { font-weight: 600; }
+.dialog-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.dialog-actions .hint { margin-right: auto; }
+
+/* ---------- address bar (Fluent Breadcrumb in a field) ---------- */
+.addr { display: flex; align-items: center; gap: 2px; height: 36px; padding: 0 4px 0 8px; border-radius: var(--radius-sm); border: 1px solid var(--input); border-bottom-color: var(--grey-38); background: var(--card); margin-bottom: 8px; min-width: 0; }
+.addr .crumbs { display: flex; align-items: center; min-width: 0; flex: 1; overflow: hidden; }
+.crumb { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 6px; border-radius: var(--radius-xs); color: var(--grey-26); white-space: nowrap; flex: none; }
+.crumb.cur { color: var(--foreground); font-weight: 600; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; display: block; line-height: 28px; }
+.crumb.more { color: var(--grey-38); }
+.sep { color: var(--grey-74); flex: none; display: grid; }
+.sep svg.ic { width: 12px; height: 12px; }
+.addr.edit { border-bottom: 2px solid var(--primary); }
+.addr.edit input { flex: 1; min-width: 0; border: 0; outline: 0; font: 13px/20px var(--font-mono); color: var(--foreground); background: transparent; padding: 0 4px; }
+.addr.invalid { border-color: var(--destructive-border); border-bottom: 2px solid var(--destructive); }
+.field-err { display: flex; gap: 6px; align-items: center; color: var(--destructive); font-size: var(--text-caption); margin: -4px 0 8px; }
+
+/* ---------- tree ---------- */
+.tree { position: relative; border: 1px solid var(--grey-88); border-radius: var(--radius-md); background: var(--card); overflow: auto; padding: 4px; scrollbar-width: thin; }
+.tree.h-desk { height: 296px; }
+.ti { position: relative; display: flex; align-items: center; gap: 6px; height: var(--row); padding-right: 8px; padding-left: calc(4px + var(--lvl, 0) * var(--ind)); border-radius: var(--radius-sm); color: var(--foreground); white-space: nowrap; cursor: default; }
+.ti::before { /* indent guides: one 1px line under each ancestor's chevron */
+  content: ""; position: absolute; top: 0; bottom: 0; left: 14px; width: calc(var(--lvl, 0) * var(--ind));
+  background: repeating-linear-gradient(to right, var(--tree-guide) 0 1px, transparent 1px var(--ind)); pointer-events: none; }
+.ti { transition: background var(--dur-fast) var(--curve-ease); }
+.ti:hover, .ti.hover { background: var(--tree-row-bg-hover); }
+.ti:active, .ti.pressed { background: var(--tree-row-bg-pressed); }
+.ti:focus-visible, .ti.focus { outline: 2px solid var(--tree-focus-ring); outline-offset: -2px; box-shadow: inset 0 0 0 3px var(--card); } /* Fluent double ring */
+.crumb:focus-visible, .btn:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--tree-focus-ring); outline-offset: 2px; }
+.ti .chev { width: 20px; height: 20px; display: grid; place-items: center; color: var(--grey-38); flex: none; border-radius: var(--radius-xs); }
+.ti .chev svg.ic { width: 12px; height: 12px; }
+.ti .chev.none { visibility: hidden; }
+.ti .fi { color: var(--grey-38); display: grid; }
+.ti .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ti .meta { margin-left: auto; padding-left: 12px; color: var(--muted-foreground); font-size: var(--text-caption); flex: none; }
+.ti .count { margin-left: auto; padding: 0 6px; height: 18px; line-height: 18px; border-radius: var(--radius-xs); background: var(--grey-94); color: var(--grey-38); font-size: 11px; font-weight: 600; flex: none; }
+.ti[aria-selected="true"] { background: var(--tree-row-bg-selected); font-weight: 600; }
+.ti[aria-selected="true"] .fi { color: var(--tree-row-fg-selected-icon); }
+.ti[aria-selected="true"]::after { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: var(--radius-full); background: var(--tree-indicator); }
+.ti.dotdir .nm, .ti.dotdir .fi { color: var(--grey-38); }
+.ti.dotdir .nm { font-style: italic; }
+.ti.denied .nm { color: var(--grey-38); }
+.ti.denied .fi { color: var(--destructive); }
+.ti.disabled, .ti[aria-disabled="true"] { opacity: var(--opacity-disabled); cursor: not-allowed; }
+.ti.disabled:hover { background: transparent; }
+.ti.note { color: var(--muted-foreground); font-size: var(--text-caption); }
+.ti.note.err { color: var(--destructive); }
+.ti.note .link { color: var(--primary); font-weight: 600; margin-left: 8px; }
+.skel { height: 10px; border-radius: var(--radius-xs); background: linear-gradient(90deg, var(--grey-94), var(--grey-90), var(--grey-94)); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.ti .filter { display: flex; align-items: center; gap: 6px; height: 26px; flex: 1; padding: 0 8px; border: 1px solid var(--input); border-radius: var(--radius-sm); color: var(--grey-38); font-size: var(--text-caption); background: var(--card); }
+.ti .filter.on { border-bottom: 2px solid var(--primary); color: var(--foreground); }
+.tooltip { position: absolute; z-index: 3; background: var(--grey-14); color: var(--primary-foreground); font-size: var(--text-caption); line-height: var(--lh-caption); padding: 5px 8px; border-radius: var(--radius-xs); box-shadow: var(--shadow-8); white-space: nowrap; }
+
+/* ---------- message bar (Fluent MessageBar) ---------- */
+.mbar { display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px; border-radius: var(--radius-md); margin-bottom: 8px; font-size: var(--text-caption); line-height: var(--lh-caption); }
+.mbar.info { background: var(--info-bg); box-shadow: inset 0 0 0 1px var(--info-border); }
+.mbar.info .ico { color: var(--primary); }
+.mbar.warn { background: var(--warning-bg); box-shadow: inset 0 0 0 1px var(--warning-border); }
+.mbar.warn .ico { color: var(--warning); }
+.mbar .ico { display: grid; padding-top: 0; }
+.mbar .ico svg.ic { width: 16px; height: 16px; }
+.mbar code { font-family: var(--font-mono); }
+
+/* ---------- accordion (hidden sessions) ---------- */
+.acc { border: 1px solid var(--grey-88); border-radius: var(--radius-md); margin: 12px 0 20px; overflow: hidden; }
+.acc-head { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; font-weight: 600; }
+.acc-head .badge-n { margin-left: 4px; font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: var(--radius-full); background: var(--grey-94); color: var(--grey-38); }
+.acc-head .chev { margin-left: auto; color: var(--grey-38); display: grid; }
+.hrow { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--grey-94); padding: 6px 6px 6px 14px; }
+.hrow span { min-width: 0; flex: 1; }
+.hrow b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.hrow small { display: block; font-family: var(--font-mono); font-size: var(--text-caption); color: var(--muted-foreground); }
+
+/* ---------- state gallery ---------- */
+.gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.card { background: var(--card); border-radius: var(--radius-lg); box-shadow: var(--shadow-4); padding: 18px 18px 16px; min-width: 0; }
+.card h4 { margin: 0 0 4px; font-size: var(--text-body); font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.card h4 .tag { font-family: var(--font-mono); font-size: 11px; color: var(--primary); background: var(--brand-160); border-radius: var(--radius-full); padding: 0 8px; font-weight: 600; }
+.card > .anno { margin: 0 0 12px; }
+.card .tree { height: 236px; }
+
+/* ---------- phone ---------- */
+.phone-row { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
+.phone-col { display: grid; gap: 14px; width: 390px; }
+.phone { width: 390px; height: 844px; border-radius: 48px; padding: 10px; background: #1b1b1b; box-shadow: var(--shadow-28); flex: none; }
+.phone-screen { position: relative; height: 100%; border-radius: 38px; overflow: hidden; display: flex; flex-direction: column; background: var(--term-bg); }
+.statusbar { position: relative; z-index: 1; height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 13px; font-weight: 600; color: #fff; flex: none; }
+.statusbar .cam { width: 12px; height: 12px; border-radius: var(--radius-full); background: #000; }
+.statusbar.light { color: var(--foreground); }
+.p-scrim { position: absolute; inset: 0; background: var(--scrim-sheet); z-index: 1; }
+.sheet { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; top: 52px; background: var(--popover); border-radius: var(--radius-xl) var(--radius-xl) 0 0; box-shadow: var(--shadow-64); display: flex; flex-direction: column; overflow: hidden; }
+.sheet.full { top: 36px; }
+.handle { width: 32px; height: 4px; border-radius: var(--radius-full); background: var(--grey-74); margin: 8px auto 4px; flex: none; }
+.sheet-head { display: flex; align-items: center; gap: 4px; padding: 4px 8px 8px 20px; flex: none; }
+.sheet-head.back { padding-left: 4px; }
+.sheet-head h3 { margin: 0; flex: 1; font-size: var(--text-subtitle2); line-height: var(--lh-subtitle2); font-weight: 600; min-width: 0; }
+.sheet-head h3 small { display: block; font-weight: 400; font-size: var(--text-caption); line-height: var(--lh-caption); color: var(--muted-foreground); }
+.sheet-body { flex: 1; min-height: 0; overflow: auto; padding: 0 16px 12px; }
+.sheet-foot { flex: none; padding: 12px 16px 22px; border-top: 1px solid var(--grey-94); background: var(--card); }
+.sheet-foot .sel { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: var(--text-caption); color: var(--muted-foreground); min-width: 0; }
+.sheet-foot .sel code { font-family: var(--font-mono); color: var(--foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; flex: 1; min-width: 0; }
+.p-choice { display: grid; grid-template-columns: 36px 1fr 20px; gap: 12px; align-items: center; min-height: 60px; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--grey-88); margin-bottom: 8px; }
+.p-choice .glyph { width: 36px; height: 36px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--grey-94); color: var(--grey-26); }
+.p-choice b { display: block; font-weight: 600; }
+.p-choice small { color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--lh-caption); }
+.p-choice.selected { border: 2px solid var(--primary); padding: 9px 13px; background: var(--brand-160); }
+.p-choice.selected .glyph { background: var(--card); color: var(--primary); }
+.p-label { font-weight: 600; margin: 14px 0 8px; display: flex; justify-content: space-between; align-items: baseline; }
+.startin { display: grid; grid-template-columns: 36px 1fr 20px; gap: 12px; align-items: center; min-height: 64px; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--input); border-bottom-color: var(--grey-38); background: var(--card); }
+.startin .glyph { width: 36px; height: 36px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--brand-160); color: var(--primary); }
+.startin b { display: block; font-weight: 600; }
+.startin code { display: block; font-family: var(--font-mono); font-size: var(--text-caption); color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.startin .go { color: var(--grey-38); display: grid; }
+.p-tree { --ind: var(--tree-indent-touch); --row: var(--tree-row-h-touch); }
+.p-tree .ti { height: auto; min-height: var(--row); }
+.p-tree .tree { border: 0; border-radius: 0; padding: 0 8px; }
+.p-tree .ti { font-size: 15px; gap: 8px; }
+.p-tree .ti .chev { width: 40px; height: 44px; margin-right: -4px; } /* hit zone 40x44; row remainder selects */
+.p-tree .ti::before { left: 24px; }
+.pinned { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 2px; height: 44px; padding: 0 4px 0 4px; margin: 0 -8px; background: var(--grey-98); border-bottom: 1px solid var(--grey-92); font-size: 13px; color: var(--grey-26); white-space: nowrap; overflow: hidden; }
+.pinned .crumb { height: 36px; padding: 0 8px; }
+.pinned .crumb.cur { line-height: 36px; }
+.pinned .up { color: var(--grey-26); }
+.depth-chip { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--grey-38); background: var(--grey-94); border-radius: var(--radius-full); padding: 0 8px; height: 20px; line-height: 20px; flex: none; }
+.p-toolbar { display: flex; align-items: center; gap: 8px; padding: 0 16px 8px; flex: none; }
+.p-toolbar .addr { flex: 1; margin: 0; height: 40px; }
+.ime { position: relative; z-index: 3; height: 272px; background: #e9ecef; padding: 10px 4px 22px; display: grid; grid-template-rows: auto repeat(4, 1fr); gap: 8px; flex: none; }
+.ime .cap { text-align: center; font-size: 11px; color: var(--grey-38); }
+.ime-row { display: flex; gap: 5px; justify-content: center; padding: 0 2px; }
+.ime-row span { flex: 1; max-width: 34px; background: #fff; border-radius: 6px; display: grid; place-items: center; font-size: 17px; color: var(--grey-14); box-shadow: 0 1px 0 rgba(0,0,0,.12); }
+.ime-row span.w { max-width: none; flex: 1.6; font-size: 12px; background: #d3d7dc; }
+.ime-row span.space { flex: 5; max-width: none; }
+.notes { flex: 1; min-width: 300px; max-width: 460px; }
+.notes h4 { margin: 0 0 8px; font-size: var(--text-subtitle2); font-weight: 600; }
+.notes ul { margin: 0 0 22px; padding-left: 18px; color: var(--grey-26); }
+.notes li { margin: 6px 0; }
+
+/* ---------- tab strip ---------- */
+.strip-row > * { min-width: 0; }
+.strip-row { display: grid; grid-template-columns: 320px 1fr; gap: 32px; align-items: start; }
+.rail { background: var(--surface-acrylic); border-radius: var(--radius-lg); padding: 16px; box-shadow: var(--shadow-2); }
+.rail-section { font-size: var(--text-caption); font-weight: 600; color: var(--muted-foreground); letter-spacing: .04em; text-transform: uppercase; padding: 0 8px 10px; }
+.session { position: relative; display: grid; grid-template-columns: 36px 1fr; gap: 12px; align-items: start; padding: 12px; border-radius: var(--radius-md); }
+.session + .session { margin-top: 6px; }
+.session.active { background: var(--card); box-shadow: var(--shadow-4); }
+.session.active::before { content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 3px; border-radius: var(--radius-full); background: var(--primary); }
+.session .glyph { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-sm); background: var(--grey-94); color: var(--grey-26); }
+.session.active .glyph { background: var(--brand-160); color: var(--primary); }
+.session > span:last-child { min-width: 0; }
+.lbl { display: flex; min-width: 0; white-space: nowrap; }
+.lbl .f { font-weight: 600; flex: none; max-width: 70%; overflow: hidden; text-overflow: ellipsis; }
+.lbl .s { font-weight: 400; color: var(--grey-26); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lbl .s::before { content: " · "; white-space: pre; color: var(--grey-74); }
+.lbl .s.typing { color: var(--muted-foreground); font-style: italic; }
+.session .meta { display: block; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--lh-caption); margin-top: 2px; font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px; margin-top: 8px; border-radius: var(--radius-full); font-size: var(--text-caption); font-weight: 600; line-height: 1; }
+.badge.run { background: var(--success-bg); color: var(--success); box-shadow: inset 0 0 0 1px var(--success-border); }
+.badge.idle { background: var(--grey-96); color: var(--grey-38); box-shadow: inset 0 0 0 1px var(--grey-88); }
+.dot { width: 8px; height: 8px; border-radius: var(--radius-full); background: currentColor; flex: none; }
+.main-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: var(--card); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); margin-bottom: 16px; min-width: 0; }
+.main-head .lbl { font-size: var(--text-subtitle1); line-height: var(--lh-subtitle1); flex: 1; }
+.main-head .lbl .f { max-width: 40%; }
+.p-tabs-demo { background: var(--card); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); padding: 14px 16px; margin-bottom: 16px; }
+.p-tabs { display: flex; gap: 8px; overflow: hidden; width: 358px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 4px 0 12px; border-radius: var(--radius-full); background: rgba(0,0,0,.03); border: 1px solid rgba(0,0,0,.06); font-size: 13px; color: var(--grey-26); white-space: nowrap; flex: none; max-width: 168px; }
+.chip .lbl { min-width: 0; }
+.chip .lbl .f { max-width: 96px; }
+.chip.on { background: var(--card); box-shadow: var(--shadow-4); border-color: transparent; color: var(--foreground); max-width: 220px; }
+.chip.on .dot { color: var(--success); }
+.chip .x { width: 24px; height: 24px; display: grid; place-items: center; color: var(--grey-38); flex: none; }
+.chip .x svg.ic { width: 14px; height: 14px; }
+.chip.add { width: 32px; padding: 0; justify-content: center; }
+.p-appbar-demo { display: flex; align-items: center; gap: 6px; font-size: var(--text-subtitle2); line-height: var(--lh-subtitle2); margin-bottom: 12px; width: 358px; }
+.p-appbar-demo .lbl { flex: 1; }
+.lifecycle { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; font-size: var(--text-body); }
+.lifecycle .anno { white-space: nowrap; }
+.lifecycle .lbl { max-width: 420px; }
+
+/* Signature motion: on open, rows reveal depth by depth (40 ms per level, decelerate) down to the remembered
+   folder, then its selection indicator grows in. Runs once per dialog open; off under reduced motion. */
+.tree.unfold .ti { animation: rowin 200ms var(--curve-decel) both; animation-delay: calc(var(--lvl, 0) * 40ms); }
+.tree.unfold [aria-selected="true"]::after { animation: grow 250ms var(--curve-decel) 420ms both; transform-origin: center; }
+@keyframes rowin { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes grow { from { transform: scaleY(0); } }
+.spec { width: 100%; border-collapse: collapse; }
+.spec th, .spec td { text-align: left; vertical-align: middle; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--grey-94); }
+.spec thead th { font-size: var(--text-caption); color: var(--muted-foreground); font-weight: 600; }
+.spec tbody th { font-weight: 600; white-space: nowrap; }
+.spec code { font-size: 12px; color: var(--grey-26); }
+.spec tr:last-child > * { border-bottom: 0; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+@media (max-width: 1100px) { .doc-head, .strip-row { grid-template-columns: 1fr; } .gallery { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-arrow_left" viewBox="0 0 20 20"><path d="M9.16 16.87a.5.5 0 1 0 .67-.74L3.67 10.5H17.5a.5.5 0 0 0 0-1H3.67l6.16-5.63a.5.5 0 0 0-.67-.74L2.24 9.44a.75.75 0 0 0 0 1.11z"/></symbol><symbol id="i-bot" viewBox="0 0 20 20"><path d="M12 5.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-5 1a1 1 0 1 1 2 0 1 1 0 0 1-2 0m3.5-4a.5.5 0 0 0-1 0V3h-3C5.67 3 5 3.67 5 4.5v4c0 .83.67 1.5 1.5 1.5h7c.83 0 1.5-.67 1.5-1.5v-4c0-.83-.67-1.5-1.5-1.5h-3zM6.5 4h7c.28 0 .5.22.5.5v4a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-4c0-.28.22-.5.5-.5m3.75 14c2.62-.04 4.2-.6 5.12-1.44A3.5 3.5 0 0 0 16.5 14h.01v-.69c0-1-.81-1.8-1.8-1.8h-3.2v-.01H5.3c-.99 0-1.8.81-1.8 1.81v.7c.04.77.25 1.75 1.13 2.55.93.84 2.5 1.4 5.12 1.44zm-4.94-5.5h9.38c.45 0 .81.37.81.81v.44c0 .69-.13 1.46-.8 2.07C14 16.45 12.66 17 10 17s-4.01-.55-4.7-1.18a2.6 2.6 0 0 1-.8-2.07v-.44c0-.44.36-.8.8-.8"/></symbol><symbol id="i-chevron_down" viewBox="0 0 20 20"><path d="M15.85 7.65c.2.2.2.5 0 .7l-5.46 5.49a.55.55 0 0 1-.78 0L4.15 8.35a.5.5 0 1 1 .7-.7L10 12.8l5.15-5.16c.2-.2.5-.2.7 0"/></symbol><symbol id="i-chevron_right" viewBox="0 0 20 20"><path d="M7.65 4.15c.2-.2.5-.2.7 0l5.49 5.46c.21.22.21.57 0 .78l-5.49 5.47a.5.5 0 0 1-.7-.71L12.8 10 7.65 4.85a.5.5 0 0 1 0-.7"/></symbol><symbol id="i-copy" viewBox="0 0 20 20"><path d="M7 7H5a2 2 0 0 0-2 2v6c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2h1a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3h2zm8-5a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-4a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3zm-4 1a2 2 0 0 0-2 2v6c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z"/></symbol><symbol id="i-dismiss" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></symbol><symbol id="i-error_circle" viewBox="0 0 20 20"><path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16m0 1a7 7 0 1 0 0 14 7 7 0 0 0 0-14m0 9.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5M10 6a.5.5 0 0 1 .5.41V11a.5.5 0 0 1-1 .09V6.5c0-.28.22-.5.5-.5"/></symbol><symbol id="i-eye" viewBox="0 0 20 20"><path d="M3.26 11.6A7 7 0 0 1 10 6c3.2 0 6.06 2.33 6.74 5.6a.5.5 0 0 0 .98-.2A8 8 0 0 0 10 5a8 8 0 0 0-7.72 6.4.5.5 0 0 0 .98.2M10 8a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7m-2.5 3.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0"/></symbol><symbol id="i-eye_off" viewBox="0 0 20 20"><path d="M2.85 2.15a.5.5 0 1 0-.7.7l3.5 3.5a8 8 0 0 0-3.37 5.05.5.5 0 1 0 .98.2 7 7 0 0 1 3.1-4.53l1.6 1.59a3.5 3.5 0 1 0 4.88 4.89l4.3 4.3a.5.5 0 0 0 .71-.7zm9.27 10.68a2.5 2.5 0 1 1-3.45-3.45zm-2-4.83 3.38 3.38A3.5 3.5 0 0 0 10.12 8M10 6q-.86 0-1.67.21l-.8-.8A8 8 0 0 1 10 5c3.7 0 6.94 2.67 7.72 6.4a.5.5 0 0 1-.98.2A7 7 0 0 0 10 6"/></symbol><symbol id="i-folder" viewBox="0 0 20 20"><path d="M4.5 3A2.5 2.5 0 0 0 2 5.5v9A2.5 2.5 0 0 0 4.5 17h11a2.5 2.5 0 0 0 2.5-2.5v-7A2.5 2.5 0 0 0 15.5 5H9.7L8.23 3.51A1.8 1.8 0 0 0 6.98 3zM3 5.5C3 4.67 3.67 4 4.5 4h2.48q.32 0 .53.22L8.8 5.5 7.44 6.85a.5.5 0 0 1-.35.15H3zM3 8h4.09c.4 0 .78-.16 1.06-.44L9.7 6h5.79c.83 0 1.5.67 1.5 1.5v7c0 .83-.67 1.5-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z"/></symbol><symbol id="i-folder_arrow_up" viewBox="0 0 20 20"><path d="M4.5 3A2.5 2.5 0 0 0 2 5.5v9A2.5 2.5 0 0 0 4.5 17h5.1q-.24-.48-.4-1H4.5A1.5 1.5 0 0 1 3 14.5V8h4.09c.4 0 .78-.16 1.06-.44L9.7 6h5.79c.83 0 1.5.67 1.5 1.5v2.1q.54.27 1 .66V7.5A2.5 2.5 0 0 0 15.5 5H9.7L8.23 3.51A1.8 1.8 0 0 0 6.98 3zM3 5.5C3 4.67 3.67 4 4.5 4h2.48q.32 0 .53.22L8.8 5.5 7.44 6.85a.5.5 0 0 1-.35.15H3zm16 9a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0m-4.85-2.35-2 2a.5.5 0 0 0 .7.7L14 13.71v2.79a.5.5 0 0 0 1 0v-2.8l1.15 1.15a.5.5 0 0 0 .7-.7l-2-2a.5.5 0 0 0-.35-.15.5.5 0 0 0-.35.14"/></symbol><symbol id="i-folder_link" viewBox="0 0 20 20"><path d="M4.5 3A2.5 2.5 0 0 0 2 5.5v9A2.5 2.5 0 0 0 4.5 17h4.84a4 4 0 0 1-.3-1H4.5A1.5 1.5 0 0 1 3 14.5V8h4.09c.4 0 .78-.16 1.06-.44L9.7 6h5.79c.83 0 1.5.67 1.5 1.5v4.54q.53.07 1 .3V7.5A2.5 2.5 0 0 0 15.5 5H9.7L8.23 3.51A1.8 1.8 0 0 0 6.98 3zM3 5.5C3 4.67 3.67 4 4.5 4h2.48q.32 0 .53.22L8.8 5.5 7.44 6.85a.5.5 0 0 1-.35.15H3zm9.5 7.5a2.5 2.5 0 0 0 0 5h.5a.5.5 0 0 0 0-1h-.5a1.5 1.5 0 0 1 0-3h.5a.5.5 0 0 0 0-1zm3.5 0a.5.5 0 0 0 0 1h.5a1.5 1.5 0 0 1 0 3H16a.5.5 0 0 0 0 1h.5a2.5 2.5 0 0 0 0-5zm-4 2.5c0-.28.22-.5.5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5"/></symbol><symbol id="i-folder_open" viewBox="0 0 20 20"><path d="M3 5.5v6.6l1.5-2.6A3 3 0 0 1 7.1 8H15v-.5c0-.83-.67-1.5-1.5-1.5h-4a.5.5 0 0 1-.35-.15l-1.71-1.7A.5.5 0 0 0 7.09 4H4.5C3.67 4 3 4.67 3 5.5m1.28 10.48.22.02h9.4a2 2 0 0 0 1.73-1l2.17-3.75A1.5 1.5 0 0 0 16.5 9H7.1a2 2 0 0 0-1.73 1L3.2 13.75a1.5 1.5 0 0 0 1.08 2.23M2 14.46V5.5A2.5 2.5 0 0 1 4.5 3h2.59c.4 0 .78.16 1.06.44L9.7 5h3.79A2.5 2.5 0 0 1 16 7.5V8h.5a2.5 2.5 0 0 1 2.16 3.75L16.5 15.5a3 3 0 0 1-2.6 1.5H4.5a2.5 2.5 0 0 1-1.62-.6A2.5 2.5 0 0 1 2 14.46"/></symbol><symbol id="i-folder_prohibited" viewBox="0 0 20 20"><path d="M4.5 3A2.5 2.5 0 0 0 2 5.5v9A2.5 2.5 0 0 0 4.5 17h5.1q-.24-.48-.4-1H4.5A1.5 1.5 0 0 1 3 14.5V8h4.09c.4 0 .78-.16 1.06-.44L9.7 6h5.79c.83 0 1.5.67 1.5 1.5v2.1q.54.27 1 .66V7.5A2.5 2.5 0 0 0 15.5 5H9.7L8.23 3.51A1.8 1.8 0 0 0 6.98 3zM3 5.5C3 4.67 3.67 4 4.5 4h2.48q.32 0 .53.22L8.8 5.5 7.44 6.85a.5.5 0 0 1-.35.15H3zm7 9a4.5 4.5 0 1 0 9 0 4.5 4.5 0 0 0-9 0m1 0a3.5 3.5 0 0 1 5.6-2.8l-4.9 4.9a3.5 3.5 0 0 1-.7-2.1m3.5 3.5q-1.2-.02-2.1-.7l4.9-4.9q.68.9.7 2.1a3.5 3.5 0 0 1-3.5 3.5"/></symbol><symbol id="i-home" viewBox="0 0 20 20"><path d="M9 2.39a1.5 1.5 0 0 1 2 0l5.5 4.94c.32.28.5.69.5 1.12v7.05c0 .83-.67 1.5-1.5 1.5H13a1.5 1.5 0 0 1-1.5-1.5V12a.5.5 0 0 0-.5-.5H9a.5.5 0 0 0-.5.5v3.5c0 .83-.67 1.5-1.5 1.5H4.5A1.5 1.5 0 0 1 3 15.5V8.45c0-.43.18-.84.5-1.12zm1.33.74a.5.5 0 0 0-.66 0l-5.5 4.94a.5.5 0 0 0-.17.38v7.05c0 .28.22.5.5.5H7a.5.5 0 0 0 .5-.5V12c0-.83.67-1.5 1.5-1.5h2c.83 0 1.5.67 1.5 1.5v3.5c0 .28.22.5.5.5h2.5a.5.5 0 0 0 .5-.5V8.45a.5.5 0 0 0-.17-.38z"/></symbol><symbol id="i-info" viewBox="0 0 20 20"><path d="M10.5 8.91a.5.5 0 0 0-1 .09v4.6a.5.5 0 0 0 1-.1V8.91m.3-2.16a.75.75 0 1 0-1.5 0 .75.75 0 0 0 1.5 0M18 10a8 8 0 1 0-16 0 8 8 0 0 0 16 0M3 10a7 7 0 1 1 14 0 7 7 0 0 1-14 0"/></symbol><symbol id="i-more_horizontal" viewBox="0 0 20 20"><path d="M6.25 10a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0m5 0a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0M15 11.25a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5"/></symbol><symbol id="i-people_team" viewBox="0 0 20 20"><path d="M10 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M7.5 4.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0m8-.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0m-10 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0m1-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m.6 12H5a2 2 0 0 1-2-2V9.25c0-.14.11-.25.25-.25h1.76q.06-.55.37-1H3.25C2.56 8 2 8.56 2 9.25V13a3 3 0 0 0 3.4 2.97 5 5 0 0 1-.3-.97m9.5.97q.2.03.4.03a3 3 0 0 0 3-3V9.25C18 8.56 17.44 8 16.75 8h-2.13q.3.45.37 1h1.76q.23.02.25.25V13a2 2 0 0 1-2.1 2q-.1.5-.3.97M7.25 8C6.56 8 6 8.56 6 9.25V14a4 4 0 0 0 8 0V9.25C14 8.56 13.44 8 12.75 8zM7 9.25c0-.14.11-.25.25-.25h5.5q.23.02.25.25V14a3 3 0 1 1-6 0z"/></symbol><symbol id="i-search" viewBox="0 0 20 20"><path d="M13.73 14.44a6.5 6.5 0 1 1 .7-.7l3.42 3.4a.5.5 0 0 1-.63.77l-.07-.06zm-.71-.71A5.5 5.5 0 0 0 15 9.5a5.5 5.5 0 1 0-1.98 4.23"/></symbol><symbol id="i-window_console" viewBox="0 0 20 20"><path d="M5.65 9.15c.2-.2.5-.2.7 0l2 2a.5.5 0 0 1 0 .7l-2 2a.5.5 0 0 1-.7-.7l1.64-1.65-1.64-1.65a.5.5 0 0 1 0-.7M14.5 13h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1M3 5.5A2.5 2.5 0 0 1 5.5 3h9A2.5 2.5 0 0 1 17 5.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 14.5zM16 6v-.5c0-.83-.68-1.5-1.5-1.5h-9C4.67 4 4 4.67 4 5.5V6zM4 7v7.5c0 .83.67 1.5 1.5 1.5h9c.82 0 1.5-.67 1.5-1.5V7z"/></symbol></svg>
+<main class="doc">
+
+<header class="doc-head">
+  <div>
+    <div class="eyebrow">Roosterm · Mockup 4a · New-session folder picker</div>
+    <h1>Expandable folder tree</h1>
+    <p>A Fluent 2 TreeView rooted at your home folder, opened already expanded down to the folder you used last time, with that row selected and centred. A breadcrumb address bar above it shows — and can take a typed — path.</p>
+  </div>
+  <aside class="tradeoffs">
+    <h3>Trade-offs of the tree direction</h3>
+    <ul>
+      <li><b>+ Context:</b> every ancestor's siblings stay visible; jumping to the sibling project is one click, no back-navigation.</li>
+      <li><b>+ Desktop-native:</b> arrow keys, type-ahead, Enter to open — the Fluent TreeView keyboard model users know from Explorer / VS Code.</li>
+      <li><b>− Width on phone:</b> indentation eats a 390 px screen; solved by 12 px indents capped at 4 steps with a pinned-ancestor rebase (screen 03).</li>
+      <li><b>− Height:</b> the tree wants ~300 px; the hidden-sessions list folds into an accordion on desktop and the picker becomes a second sheet step on phone.</li>
+    </ul>
+  </aside>
+</header>
+
+<!-- ======================= 01 DESKTOP DEFAULT ======================= -->
+<section class="screen">
+  <div class="screen-label"><span class="num">01</span><h2>Desktop · dialog opens at the remembered folder</h2><span class="note">Last used: <code class="mono">~/project/roosterm/web/src/workspace</code> · auto-expanded, selected, scrolled to centre</span></div>
+  <div class="mica dialog-stage">
+    <div class="ghost"><div class="g-rail"></div><div class="g-card"></div></div>
+    <div class="scrim"></div>
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="d1">
+      <div class="dialog-head">
+        <h3 id="d1">New session</h3>
+        <button class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-dismiss"/></svg></button>
+      </div>
+      <p class="lead">Start a shell or Claude Code on studio-mac in a folder of your home directory, or attach to a running swarm.</p>
+      <div class="choices" role="radiogroup" aria-label="Session type">
+        <div class="choice" role="radio" aria-checked="false"><span class="glyph"><svg class="ic"><use href="#i-window_console"/></svg></span><span><b>Shell</b><small>Login shell</small></span><span class="radio"></span></div>
+        <div class="choice selected" role="radio" aria-checked="true"><span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span><span><b>Claude Code</b><small>claude in folder</small></span><span class="radio on"></span></div>
+        <div class="choice" role="radio" aria-checked="false"><span class="glyph"><svg class="ic"><use href="#i-people_team"/></svg></span><span><b>Swarm</b><small>Attach to socket</small></span><span class="radio"></span></div>
+      </div>
+
+      <div class="section-label">
+        <b id="startin-1">Start in</b>
+        <span class="switch"><i></i>Hidden folders</span>
+      </div>
+      <div class="addr" title="Click empty space or press Ctrl+L to type a path">
+        <div class="crumbs">
+          <span class="crumb"><svg class="ic sm"><use href="#i-home"/></svg>~</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span>
+          <span class="crumb">project</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span>
+          <span class="crumb">roosterm</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span>
+          <span class="crumb">web</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span>
+          <span class="crumb">src</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span>
+          <span class="crumb cur">workspace</span>
+        </div>
+        <button class="icon-btn" aria-label="Copy path" style="width:28px;height:28px"><svg class="ic sm"><use href="#i-copy"/></svg></button>
+      </div>
+      <div class="tree h-desk unfold" role="tree" aria-labelledby="startin-1">
+        <div class="ti" role="treeitem" aria-level="1" aria-expanded="true" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-home"/></svg></span><span class="nm">~ <span class="anno">jhangyu</span></span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">Desktop</span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">Documents</span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">Downloads</span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">go</span></div>
+        <div class="ti" aria-expanded="true" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">project</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">aurora</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">ledger-sync</span></div>
+        <div class="ti" aria-expanded="true" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">roosterm</span></div>
+        <div class="ti" style="--lvl:3"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">app</span></div>
+        <div class="ti" style="--lvl:3"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">docs</span></div>
+        <div class="ti" style="--lvl:3"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">host</span></div>
+        <div class="ti" style="--lvl:3"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">scripts</span></div>
+        <div class="ti" aria-expanded="true" style="--lvl:3"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">web</span></div>
+        <div class="ti" style="--lvl:4"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">public</span></div>
+        <div class="ti" aria-expanded="true" style="--lvl:4"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">src</span></div>
+        <div class="ti" style="--lvl:5"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">api</span></div>
+        <div class="ti" style="--lvl:5"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">components</span></div>
+        <div class="ti" style="--lvl:5"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">styles</span></div>
+        <div class="ti hover" style="--lvl:5"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">terminal</span></div>
+        <div class="ti" role="treeitem" aria-level="7" aria-selected="true" tabindex="0" style="--lvl:5"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">workspace</span><span class="meta">last used · 2 d ago</span></div>
+        <div class="ti" style="--lvl:3"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">scratch</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">tiny-http</span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">ui-kits</span></div>
+      </div>
+
+      <div class="acc">
+        <div class="acc-head"><svg class="ic sm"><use href="#i-eye_off"/></svg>Hidden sessions<span class="badge-n">2</span><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span></div>
+      </div>
+
+      <div class="dialog-actions">
+        <span class="anno hint"><kbd>↑</kbd> <kbd>↓</kbd> move · <kbd>→</kbd> expand · <kbd>Enter</kbd> open · type to jump</span>
+        <button class="btn">Cancel</button>
+        <button class="btn primary">Open Claude Code</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 02 STATES ======================= -->
+<section class="screen">
+  <div class="screen-label"><span class="num">02</span><h2>Desktop · tree states</h2><span class="note">Each card is the "Start in" block of the dialog above (address bar + tree box, 584 px wide in the real dialog)</span></div>
+  <div class="gallery">
+
+    <div class="card">
+      <h4><span class="tag">A</span>Loading a folder</h4>
+      <p class="anno">Expanding <b>roosterm</b>: chevron becomes a spinner, three skeleton rows hold the space so the list below doesn't jump. Selection already moved (row click selects + expands). Listings that answer within 300 ms show no loading UI at all (no flash); slower ones get spinner + skeleton.</p>
+      <div class="addr"><div class="crumbs"><span class="crumb"><svg class="ic sm"><use href="#i-home"/></svg>~</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb">project</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur">roosterm</span></div></div>
+      <div class="tree" role="tree">
+        <div class="ti" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-home"/></svg></span><span class="nm">~</span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">project</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">aurora</span></div>
+        <div class="ti" aria-selected="true" tabindex="0" aria-busy="true" style="--lvl:2"><span class="chev"><span class="spinner"></span></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">roosterm</span><span class="meta">Loading…</span></div>
+        <div class="ti" style="--lvl:3"><span class="chev none"></span><span class="skel" style="width:20px"></span><span class="skel" style="width:90px"></span></div>
+        <div class="ti" style="--lvl:3"><span class="chev none"></span><span class="skel" style="width:20px"></span><span class="skel" style="width:60px"></span></div>
+        <div class="ti" style="--lvl:3"><span class="chev none"></span><span class="skel" style="width:20px"></span><span class="skel" style="width:110px"></span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">tiny-http</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><span class="tag">B</span>Empty folder</h4>
+      <p class="anno">A folder with no subfolders loses its chevron after the first load and shows one muted note row. It stays fully selectable — an empty folder is a valid place to start.</p>
+      <div class="addr"><div class="crumbs"><span class="crumb"><svg class="ic sm"><use href="#i-home"/></svg>~</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb">project</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur">new-idea</span></div></div>
+      <div class="tree" role="tree">
+        <div class="ti" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-home"/></svg></span><span class="nm">~</span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">project</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">ledger-sync</span></div>
+        <div class="ti" aria-selected="true" tabindex="0" style="--lvl:2"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">new-idea</span></div>
+        <div class="ti note" style="--lvl:3"><span class="chev none"></span>No subfolders · files are not listed</div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">roosterm</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">tiny-http</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><span class="tag">C</span>Permission error</h4>
+      <p class="anno">Listing failed: prohibited-folder icon, the error code inline under the row, and Retry. The folder itself remains selectable (the shell may still <code class="mono">cd</code> there if only read is denied); the Open button is not blocked.</p>
+      <div class="addr"><div class="crumbs"><span class="crumb"><svg class="ic sm"><use href="#i-home"/></svg>~</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb">Library</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur">Mail</span></div></div>
+      <div class="tree" role="tree">
+        <div class="ti" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-home"/></svg></span><span class="nm">~</span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">Library</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">Caches</span></div>
+        <div class="ti denied" aria-selected="true" tabindex="0" style="--lvl:2"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder_prohibited"/></svg></span><span class="nm">Mail</span></div>
+        <div class="ti note err" style="--lvl:3"><span class="chev none"></span><svg class="ic sm"><use href="#i-error_circle"/></svg>Permission denied (EACCES)<span class="link">Retry</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">Preferences</span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">Movies</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="position:relative">
+      <h4><span class="tag">D</span>Very long names and paths</h4>
+      <p class="anno">Row names truncate at the end; hover (or keyboard focus) shows the full name in a tooltip after 500 ms. The breadcrumb collapses middle segments into <b>…</b> (a Fluent overflow menu) and keeps <b>~</b> plus the last two; the selected name is never collapsed, only ellipsised.</p>
+      <div class="addr"><div class="crumbs"><span class="crumb"><svg class="ic sm"><use href="#i-home"/></svg>~</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb more"><svg class="ic sm"><use href="#i-more_horizontal"/></svg></span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb">2026-Q3-customer-onboarding</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur">final-final-revised-v7-with-legal-comments-do-not-delete</span></div></div>
+      <div class="tree" role="tree">
+        <div class="ti" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-home"/></svg></span><span class="nm">~</span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">Documents</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">Shared with Ops — Workstreams (archived)</span></div>
+        <div class="ti" style="--lvl:3"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">2026-Q3-customer-onboarding</span></div>
+        <div class="ti focus" aria-selected="true" tabindex="0" style="--lvl:4"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">final-final-revised-v7-with-legal-comments-do-not-delete</span></div>
+        <div class="ti" style="--lvl:4"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">漢字のフォルダ名も同じ規則で省略されます-長い名前</span></div>
+      </div>
+      <div class="tooltip" style="left:70px;bottom:94px">final-final-revised-v7-with-legal-comments-do-not-delete</div>
+    </div>
+
+    <div class="card">
+      <h4><span class="tag">E</span>Deep nesting · 9 levels</h4>
+      <p class="anno">Desktop keeps the full 20 px indent: 9 levels = 180 px, still ≥ 360 px for names in the 584 px box. Indent guides under each ancestor chevron keep levels countable; siblings of ancestors were scrolled off above (auto-scroll centres the selection).</p>
+      <div class="addr"><div class="crumbs"><span class="crumb"><svg class="ic sm"><use href="#i-home"/></svg>~</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb more"><svg class="ic sm"><use href="#i-more_horizontal"/></svg></span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb">us</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur">jhangy</span></div></div>
+      <div class="tree" role="tree" style="--ind:16px">
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">roosterm</span></div>
+        <div class="ti" style="--lvl:3"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">app</span></div>
+        <div class="ti" style="--lvl:4"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">android</span></div>
+        <div class="ti" style="--lvl:5"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">app</span></div>
+        <div class="ti" style="--lvl:6"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">src</span></div>
+        <div class="ti" style="--lvl:7"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">main</span></div>
+        <div class="ti" style="--lvl:8"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">kotlin</span></div>
+        <div class="ti" style="--lvl:9"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">us</span></div>
+        <div class="ti" aria-selected="true" tabindex="0" style="--lvl:10"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">jhangy</span></div>
+      </div>
+      <p class="anno" style="margin:8px 0 0">Shown at 16 px here so the 344 px card fits; the real 584 px box uses 20 px.</p>
+    </div>
+
+    <div class="card">
+      <h4><span class="tag">F</span>Many children · 214 folders</h4>
+      <p class="anno">Folders with &gt; 50 children get a count badge and an inline filter as their first child row (rows are virtualised; type-ahead on the tree also jumps). The remembered child is pre-scrolled to centre even when it is #183 of 214.</p>
+      <div class="addr"><div class="crumbs"><span class="crumb"><svg class="ic sm"><use href="#i-home"/></svg>~</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb">Downloads</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur">repro-websocket-close</span></div></div>
+      <div class="tree" role="tree">
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">Downloads</span><span class="count">214</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev none"></span><span class="filter"><svg class="ic sm"><use href="#i-search"/></svg>Filter 214 folders</span></div>
+        <div class="ti note" style="--lvl:2;justify-content:center;padding-left:0;height:20px">· · · 181 more above · · ·</div>
+        <div class="ti" style="--lvl:2"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">receipts-2026</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">repro-tmux-resize</span></div>
+        <div class="ti" aria-selected="true" tabindex="0" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">repro-websocket-close</span><span class="meta">183 / 214</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">resume-templates</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">rust-1.92-src</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><span class="tag">G</span>Remembered folder is gone</h4>
+      <p class="anno">Not a silent fallback: the tree opens at the nearest existing ancestor and an info bar names what is missing. Dismiss clears the remembered path.</p>
+      <div class="mbar info"><span class="ico"><svg class="ic"><use href="#i-info"/></svg></span><span><code>~/project/old-spike</code> no longer exists. Opened its parent <code>~/project</code>.</span></div>
+      <div class="tree" role="tree" style="height:196px">
+        <div class="ti" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-home"/></svg></span><span class="nm">~</span></div>
+        <div class="ti" aria-selected="true" tabindex="0" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">project</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">aurora</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">ledger-sync</span></div>
+        <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">roosterm</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><span class="tag">H</span>Hidden folders on · symlink outside ~</h4>
+      <p class="anno">Switch on: dot folders appear in place, italic and dimmed. A symlink that resolves outside <b>~</b> gets the link icon, is disabled and says where it points — the root can't be left, even indirectly.</p>
+      <div class="section-label" style="justify-content:flex-end;margin-bottom:8px"><span class="switch on"><i></i>Hidden folders</span></div>
+      <div class="tree" role="tree" style="height:236px">
+        <div class="ti" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-home"/></svg></span><span class="nm">~</span></div>
+        <div class="ti dotdir" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">.cache</span></div>
+        <div class="ti dotdir" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">.claude</span></div>
+        <div class="ti dotdir" aria-expanded="true" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">.config</span></div>
+        <div class="ti" aria-selected="true" tabindex="0" style="--lvl:2"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">nvim</span></div>
+        <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">Desktop</span></div>
+        <div class="ti disabled" aria-disabled="true" title="Symlink resolves outside your home folder" style="--lvl:1"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder_link"/></svg></span><span class="nm">shared-drive</span><span class="meta">→ /Volumes/NAS · outside ~</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4><span class="tag">I</span>Typed path · invalid · swarm</h4>
+      <p class="anno">Ctrl+L (or click the bar's empty space) swaps the breadcrumb for a monospace input with <b>~</b>-relative path completion; Enter expands the tree to it. Errors stay inline under the bar. Picking <b>Swarm</b> collapses the whole Start-in block: the socket list replaces it.</p>
+      <div class="addr edit"><svg class="ic sm" style="color:var(--grey-38)"><use href="#i-home"/></svg><input autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="~/project/roost" aria-label="Folder path"></div>
+      <div class="addr edit invalid"><svg class="ic sm" style="color:var(--grey-38)"><use href="#i-home"/></svg><input autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="/etc/nginx" aria-label="Folder path"></div>
+      <div class="field-err"><svg class="ic sm"><use href="#i-error_circle"/></svg>Must be inside your home folder (~ = /Users/jhangyu)</div>
+      <div class="addr edit invalid"><svg class="ic sm" style="color:var(--grey-38)"><use href="#i-home"/></svg><input autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" value="~/project/rosterm" aria-label="Folder path"></div>
+      <div class="field-err"><svg class="ic sm"><use href="#i-error_circle"/></svg>~/project/rosterm not found · did you mean roosterm?</div>
+      <div class="mbar warn" style="margin-top:10px"><span class="ico"><svg class="ic"><use href="#i-people_team"/></svg></span><span><b>Swarm</b> selected — Start in is hidden; the swarm keeps its own working folder.</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ======================= 03 PHONE ======================= -->
+<section class="screen">
+  <div class="screen-label"><span class="num">03</span><h2>Phone · 390 px · two-step bottom sheet</h2><span class="note">Step 1 keeps type + hidden sessions; step 2 gives the tree the full height</span></div>
+  <div class="phone-row">
+
+    <div class="phone-col">
+      <div class="phone"><div class="phone-screen">
+        <div class="statusbar"><span>9:41</span><span class="cam"></span><span>5G</span></div>
+        <div class="p-scrim"></div>
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="p1">
+          <div class="handle"></div>
+          <div class="sheet-head"><h3 id="p1">New session</h3><button class="icon-btn t44" aria-label="Close"><svg class="ic"><use href="#i-dismiss"/></svg></button></div>
+          <div class="sheet-body">
+            <div role="radiogroup" aria-label="Session type">
+              <div class="p-choice"><span class="glyph"><svg class="ic"><use href="#i-window_console"/></svg></span><span><b>Shell</b><small>Login shell on studio-mac</small></span><span class="radio"></span></div>
+              <div class="p-choice selected"><span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span><span><b>Claude Code</b><small>Run claude in a folder</small></span><span class="radio on"></span></div>
+              <div class="p-choice"><span class="glyph"><svg class="ic"><use href="#i-people_team"/></svg></span><span><b>Swarm</b><small>Attach to a tmux swarm socket</small></span><span class="radio"></span></div>
+            </div>
+            <div class="p-label">Start in</div>
+            <div class="startin" role="button" aria-label="Start in jhangy, change folder">
+              <span class="glyph"><svg class="ic"><use href="#i-folder_open"/></svg></span>
+              <span style="min-width:0"><b>jhangy</b><code>&lrm;~/project/roosterm/app/android/app/src/main/kotlin/us/jhangy</code></span>
+              <span class="go"><svg class="ic"><use href="#i-chevron_right"/></svg></span>
+            </div>
+            <div class="p-label">Hidden sessions <small class="anno">2</small></div>
+            <div class="acc" style="margin:0">
+              <div class="hrow" style="border-top:0;min-height:56px"><span><b>roosterm · Fix resize race in tmux pane…</b><small>a81f…c2</small></span><button class="btn" style="height:44px"><svg class="ic"><use href="#i-eye"/></svg>Show</button></div>
+              <div class="hrow" style="min-height:56px"><span><b>Downloads</b><small>3d07…9e</small></span><button class="btn" style="height:44px"><svg class="ic"><use href="#i-eye"/></svg>Show</button></div>
+            </div>
+          </div>
+          <div class="sheet-foot"><button class="btn primary lg block">Open Claude Code</button></div>
+        </div>
+      </div></div>
+      <p class="anno"><b>Step 1.</b> The remembered folder is shown as a field-styled row (name + path, path ellipsised at the <i>start</i> so the leaf stays visible). One tap = open there. Tap the row to change it.</p>
+    </div>
+
+    <div class="phone-col">
+      <div class="phone"><div class="phone-screen">
+        <div class="statusbar"><span>9:41</span><span class="cam"></span><span>5G</span></div>
+        <div class="p-scrim"></div>
+        <div class="sheet full" role="dialog" aria-modal="true" aria-labelledby="p2">
+          <div class="handle"></div>
+          <div class="sheet-head back"><button class="icon-btn t44" aria-label="Back"><svg class="ic"><use href="#i-arrow_left"/></svg></button><h3 id="p2">Start in<small>Tap a folder to select · ▸ to expand only</small></h3><button class="icon-btn t44" aria-label="Show hidden folders" title="Hidden folders"><svg class="ic"><use href="#i-eye_off"/></svg></button></div>
+          <div class="p-tree" style="flex:1;min-height:0;display:flex;flex-direction:column">
+            <div class="tree" role="tree" aria-label="Folders" style="flex:1">
+              <div class="pinned" aria-label="Ancestors above this view">
+                <button class="icon-btn t44 up" aria-label="Rebase one level up"><svg class="ic"><use href="#i-folder_arrow_up"/></svg></button>
+                <span class="crumb"><svg class="ic sm"><use href="#i-home"/></svg>~</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span>
+                <span class="crumb more"><svg class="ic sm"><use href="#i-more_horizontal"/></svg></span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span>
+                <span class="crumb">app</span><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span>
+                <span class="crumb cur">src</span>
+                <span class="depth-chip">+5</span>
+              </div>
+              <div class="ti" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">androidTest</span></div>
+              <div class="ti" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">main</span></div>
+              <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">assets</span></div>
+              <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">kotlin</span></div>
+              <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">us</span></div>
+              <div class="ti" aria-selected="true" tabindex="0" style="--lvl:3"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">jhangy</span></div>
+              <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">java-legacy-bridge-for-old-plugins</span></div>
+              <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">res</span></div>
+              <div class="ti" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">test</span></div>
+              <div class="ti denied" style="--lvl:0"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder_prohibited"/></svg></span><span class="nm">release-keys</span></div>
+              <div class="ti note err" style="--lvl:1"><span class="chev none"></span>Permission denied<span class="link">Retry</span></div>
+              <div class="ti" aria-busy="true" style="--lvl:0"><span class="chev"><span class="spinner"></span></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">generated</span><span class="meta">Loading…</span></div>
+            </div>
+          </div>
+          <div class="sheet-foot">
+            <div class="sel"><svg class="ic sm"><use href="#i-folder_open"/></svg><code>&lrm;~/project/roosterm/app/android/app/src/main/kotlin/us/jhangy</code></div>
+            <button class="btn primary lg block">Use this folder</button>
+          </div>
+        </div>
+      </div></div>
+      <p class="anno"><b>Step 2 · depth 9, rebased.</b> 44 px rows, 12 px indent, at most 4 indent steps. The 5 ancestors above <b>src</b> are pinned as one breadcrumb row (<b>+5</b> = hidden levels; tap <b>…</b> for the list, the up-folder button rebases one level). Also visible: permission-denied and loading rows.</p>
+    </div>
+
+    <div class="phone-col">
+      <div class="phone"><div class="phone-screen" style="background:var(--term-bg)">
+        <div class="statusbar"><span>9:41</span><span class="cam"></span><span>5G</span></div>
+        <div class="p-scrim"></div>
+        <div class="sheet full" style="bottom:272px;border-radius:var(--radius-xl) var(--radius-xl) 0 0" role="dialog" aria-modal="true" aria-labelledby="p3">
+          <div class="sheet-head back" style="padding-top:8px"><button class="icon-btn t44" aria-label="Back"><svg class="ic"><use href="#i-arrow_left"/></svg></button><h3 id="p3">Start in</h3><button class="btn primary" style="height:44px">Use</button></div>
+          <div class="p-tree" style="flex:1;min-height:0;display:flex;flex-direction:column">
+            <div class="tree" role="tree" aria-label="Folders" style="flex:1">
+              <div class="ti" style="--lvl:0"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-home"/></svg></span><span class="nm">~</span></div>
+              <div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_down"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">Downloads</span><span class="count">3 of 214</span></div>
+              <div class="ti" style="--lvl:2"><span class="chev none" style="width:4px"></span><span class="filter on"><svg class="ic sm"><use href="#i-search"/></svg>rep<span style="width:1px;height:16px;background:var(--primary)"></span><span style="margin-left:auto;display:grid"><svg class="ic sm"><use href="#i-dismiss"/></svg></span></span></div>
+              <div class="ti" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm"><b>rep</b>ro-tmux-resize</span></div>
+              <div class="ti" aria-selected="true" tabindex="0" style="--lvl:2"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm"><b>rep</b>ro-websocket-close</span></div>
+              <div class="ti" style="--lvl:2"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">old-<b>rep</b>orts</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="ime" style="position:absolute;left:0;right:0;bottom:0">
+          <div class="cap">rep · repo · report</div>
+          <div class="ime-row"><span>q</span><span>w</span><span>e</span><span>r</span><span>t</span><span>y</span><span>u</span><span>i</span><span>o</span><span>p</span></div>
+          <div class="ime-row"><span>a</span><span>s</span><span>d</span><span>f</span><span>g</span><span>h</span><span>j</span><span>k</span><span>l</span></div>
+          <div class="ime-row"><span class="w">⇧</span><span>z</span><span>x</span><span>c</span><span>v</span><span>b</span><span>n</span><span>m</span><span class="w">⌫</span></div>
+          <div class="ime-row"><span class="w">123</span><span class="space"></span><span class="w">done</span></div>
+        </div>
+      </div></div>
+      <p class="anno"><b>Soft keyboard open · 214 children filtered.</b> The sheet tracks the visual viewport; the bottom "Use this folder" bar moves into the header as a compact <b>Use</b> button so nothing hides behind the keyboard. Matching text is bold.</p>
+    </div>
+
+    <div class="notes">
+      <h4>Phone decisions</h4>
+      <ul>
+        <li><b>Why two steps:</b> type tiles (3 × 68 px) + hidden sessions already fill ~60 % of a 390 × 844 screen; a tree squeezed under them would show 4 rows. Step 2 shows 12+.</li>
+        <li><b>Indent 12 px × max 4 = 48 px</b> (+ 28 px chevron + 20 px icon): names always get ≥ 230 px of the 358 px row. The cap is the rebase rule, not a squeeze.</li>
+        <li><b>Rebase on open:</b> the view's top level is chosen so the selected row sits at indent ≤ 3; above it, the pinned row. Rebase is instant; expanding deeper re-bases with a 200 ms slide.</li>
+        <li><b>Tap targets:</b> rows 44 px; chevron hit area 44 × 44 at the row start (visual 28 px). Long-press a row = full name + path tooltip.</li>
+        <li><b>Hidden folders:</b> eye toggle in the sheet header (same state as the desktop switch).</li>
+        <li><b>Dark terminal behind:</b> the sheet sits on a 40 % scrim over the #1e1e1e terminal; chrome stays light.</li>
+      </ul>
+      <h4>Radius on phone (M3)</h4>
+      <ul>
+        <li>Sheet top corners — extra-large 28</li>
+        <li>Type tiles, Start-in row, hidden list — medium 12</li>
+        <li>Tree rows, buttons, filter — small 8</li>
+        <li>Handle, chips, switch — full</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= 04 TAB STRIP ======================= -->
+<section class="screen">
+  <div class="screen-label"><span class="num">04</span><h2>Resulting tab labels · <code class="mono">&lt;folder&gt; · &lt;summary&gt;</code></h2><span class="note">Desktop session rail + header, phone chips + app bar</span></div>
+  <div class="strip-row">
+    <div class="rail" aria-label="Sessions">
+      <div class="rail-section">Sessions · 5</div>
+      <div class="session active" title="roosterm · Add a reconnect handler to the websocket client and keep the scrollback across reconnects">
+        <span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span>
+        <span><span class="lbl"><span class="f">roosterm</span><span class="s">Add a reconnect handler to the websocket client and keep the scrollback across reconnects</span></span><span class="meta">~/project/roosterm</span><span class="badge run"><span class="dot"></span>Running</span></span>
+      </div>
+      <div class="session" title="web">
+        <span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span>
+        <span><span class="lbl"><span class="f">web</span></span><span class="meta">~/project/roosterm/web</span><span class="badge run"><span class="dot"></span>Running</span></span>
+      </div>
+      <div class="session" title="web · Migrate router to v7">
+        <span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span>
+        <span><span class="lbl"><span class="f">web</span><span class="s">Migrate router to v7</span></span><span class="meta">~/project/aurora/web</span><span class="badge run"><span class="dot"></span>Running</span></span>
+      </div>
+      <div class="session">
+        <span class="glyph"><svg class="ic"><use href="#i-window_console"/></svg></span>
+        <span><span class="lbl"><span class="f">Downloads</span></span><span class="meta">~/Downloads</span><span class="badge idle"><span class="dot"></span>Exited (0)</span></span>
+      </div>
+      <div class="session" title="final-final-revised-v7-with-legal-comments-do-not-delete · Summarise the legal comments">
+        <span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span>
+        <span><span class="lbl"><span class="f">final-final-revised-v7-with-legal-comments-do-not-delete</span><span class="s">Summarise the legal comments</span></span><span class="meta">~/Documents/…/2026-Q3-customer-onboarding/final-final-revised…</span><span class="badge run"><span class="dot"></span>Running</span></span>
+      </div>
+    </div>
+
+    <div>
+      <div class="main-head"><span class="glyph" style="color:var(--primary);display:grid"><svg class="ic"><use href="#i-bot"/></svg></span><span class="lbl"><span class="f">roosterm</span><span class="s">Add a reconnect handler to the websocket client and keep the scrollback across reconnects</span></span><span class="badge run" style="margin:0"><span class="dot"></span>Running</span></div>
+
+      <div class="p-tabs-demo">
+        <p class="anno" style="margin:0 0 10px"><b>Phone · 358 px strip</b> — app bar title shows the active label (one line, ellipsis); chips cap at 168 px (active 220 px), folder part capped at 96 px so the summary always shows at least a few characters.</p>
+        <div class="p-appbar-demo"><span class="lbl"><span class="f">roosterm</span><span class="s">Add a reconnect handler to the websocket client</span></span><svg class="ic sm"><use href="#i-chevron_down"/></svg></div>
+        <div class="p-tabs">
+          <span class="chip on"><span class="dot"></span><span class="lbl"><span class="f">roosterm</span><span class="s">Add a reconnect handler to the websocket client</span></span><span class="x"><svg class="ic"><use href="#i-dismiss"/></svg></span></span>
+          <span class="chip"><span class="lbl"><span class="f">web</span></span><span class="x"><svg class="ic"><use href="#i-dismiss"/></svg></span></span>
+          <span class="chip"><span class="lbl"><span class="f">web</span><span class="s">Migrate router to v7</span></span><span class="x"><svg class="ic"><use href="#i-dismiss"/></svg></span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h4>Label lifecycle</h4>
+        <p class="anno">The summary is appended live as Claude Code reports it; the folder part is fixed at creation. Separator <b>·</b> is drawn in grey-74 so the folder reads first.</p>
+        <div class="lifecycle">
+          <span class="anno"><b>t = 0</b> · just created</span><span class="lbl"><span class="f">roosterm</span></span>
+          <span class="anno"><b>first summary</b></span><span class="lbl"><span class="f">roosterm</span><span class="s">Add reconnect handler</span></span>
+          <span class="anno"><b>summary updated</b></span><span class="lbl"><span class="f">roosterm</span><span class="s">Add a reconnect handler to the websocket client and keep the scrollback across reconnects</span></span>
+          <span class="anno"><b>shell session</b></span><span class="lbl"><span class="f">Downloads</span></span>
+          <span class="anno"><b>home itself</b></span><span class="lbl"><span class="f">~</span><span class="s">Clean up old brew casks</span></span>
+          <span class="anno"><b>swarm (unchanged)</b></span><span class="lbl"><span class="f">claude-swarm-48213</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ======================= 05 TREEITEM STATE SPEC ======================= -->
+<section class="screen">
+  <div class="screen-label"><span class="num">05</span><h2>TreeItem state spec · component tokens</h2><span class="note">Hand-off table; token values are in this file's <code class="mono">:root</code> (component layer over the app's semantic tokens)</span></div>
+  <div class="card" style="padding:8px 20px">
+  <table class="spec"><thead><tr><th>State</th><th>Trigger</th><th style="width:300px">Row</th><th>Tokens / rendering</th></tr></thead><tbody><tr><th>Default</th><td class="anno">—</td><td><div class="tree" style="height:auto;border:0;padding:0;overflow:visible"><div class="ti" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">roosterm</span></div></div></td><td><code class="mono">bg transparent · fg --foreground · icon --muted-foreground</code></td></tr><tr><th>Hover</th><td class="anno">pointer over row (desktop only; nothing depends on it)</td><td><div class="tree" style="height:auto;border:0;padding:0;overflow:visible"><div class="ti hover" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">roosterm</span></div></div></td><td><code class="mono">--tree-row-bg-hover · 150 ms ease</code></td></tr><tr><th>Pressed</th><td class="anno">mouse down / touch start</td><td><div class="tree" style="height:auto;border:0;padding:0;overflow:visible"><div class="ti pressed" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">roosterm</span></div></div></td><td><code class="mono">--tree-row-bg-pressed (also the touch feedback on phone)</code></td></tr><tr><th>Selected</th><td class="anno">click / tap / arrow keys</td><td><div class="tree" style="height:auto;border:0;padding:0;overflow:visible"><div class="ti" aria-selected="true" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">roosterm</span></div></div></td><td><code class="mono">--tree-row-bg-selected · 3 px --tree-indicator · weight 600 · open-folder icon (4 cues, not colour alone)</code></td></tr><tr><th>Focus-visible</th><td class="anno">keyboard focus (roving tabindex: one tab stop = selected row)</td><td><div class="tree" style="height:auto;border:0;padding:0;overflow:visible"><div class="ti focus" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">roosterm</span></div></div></td><td><code class="mono">2 px --tree-focus-ring + 3 px inner --card (Fluent double ring)</code></td></tr><tr><th>Selected + focus</th><td class="anno">keyboard focus on the selected row</td><td><div class="tree" style="height:auto;border:0;padding:0;overflow:visible"><div class="ti focus" aria-selected="true" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">roosterm</span></div></div></td><td><code class="mono">selected + ring</code></td></tr><tr><th>Loading</th><td class="anno">expanded, listing pending > --tree-load-delay</td><td><div class="tree" style="height:auto;border:0;padding:0;overflow:visible"><div class="ti" aria-busy="true" style="--lvl:1"><span class="chev"><span class="spinner"></span></span><span class="fi"><svg class="ic"><use href="#i-folder_open"/></svg></span><span class="nm">roosterm</span><span class="meta">Loading…</span></div></div></td><td><code class="mono">spinner replaces chevron · skeleton child rows · aria-busy</code></td></tr><tr><th>Error</th><td class="anno">listing failed (EACCES …)</td><td><div class="tree" style="height:auto;border:0;padding:0;overflow:visible"><div class="ti denied" style="--lvl:1"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder_prohibited"/></svg></span><span class="nm">Mail</span></div></div></td><td><code class="mono">--destructive icon + inline text row with Retry · still selectable</code></td></tr><tr><th>Disabled</th><td class="anno">symlink resolving outside ~</td><td><div class="tree" style="height:auto;border:0;padding:0;overflow:visible"><div class="ti disabled" aria-disabled="true" style="--lvl:1"><span class="chev none"></span><span class="fi"><svg class="ic"><use href="#i-folder_link"/></svg></span><span class="nm">shared-drive</span><span class="meta">→ /Volumes/NAS</span></div></div></td><td><code class="mono">--opacity-disabled · cursor not-allowed · aria-disabled · reason in meta + title</code></td></tr><tr><th>Hidden (dot)</th><td class="anno">"Hidden folders" on, or on the remembered path</td><td><div class="tree" style="height:auto;border:0;padding:0;overflow:visible"><div class="ti dotdir" style="--lvl:1"><span class="chev"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="fi"><svg class="ic"><use href="#i-folder"/></svg></span><span class="nm">.config</span></div></div></td><td><code class="mono">italic + --muted-foreground (6.2:1 on white)</code></td></tr></tbody></table>
+  </div>
+</section>
+
+<p class="anno" style="text-align:center">Mockup 4a · static HTML, no network · Fluent 2 regular-20 icons inlined from ~/ui-kits/icons/fluent2 · M3 radius mapping in the comment at the top of this file.</p>
+</main>
+<script>
+// Mockup only: centre the selected row in its tree box (the real dialog does the same on open).
+document.querySelectorAll('.tree').forEach(function (t) {
+  var s = t.querySelector('[aria-selected="true"]');
+  if (s && t.scrollHeight > t.clientHeight) t.scrollTop = s.offsetTop - t.clientHeight / 2 + s.offsetHeight / 2;
+});
+</script>
+</body>
+</html>

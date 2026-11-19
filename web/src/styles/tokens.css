@@ -101,4 +101,15 @@
   --term-magenta: #b200b2; --term-bright-magenta: #e500e5;
   --term-cyan: #00a6b2;    --term-bright-cyan: #00e5e5;
   --term-white: #bfbfbf;   --term-bright-white: #e5e5e5;
+
+  /* Folder picker (docs/mockups/4b-folder-drill.html `:root` component layer); *-touch apply below the md breakpoint */
+  --picker-row-h: 40px;        --picker-row-h-touch: 48px;
+  --picker-crumb-h: 36px;      --picker-crumb-h-touch: 44px;
+  --picker-crumb-max: 140px;   --picker-crumb-max-touch: 110px;
+  --picker-filter-h: 40px;     --picker-filter-h-touch: 48px;
+  --picker-list-h: 240px;
+  --picker-seg-h: 48px;
+  --picker-drill-dur: 200ms;
+  --picker-drill-ease: cubic-bezier(0.1, 0.9, 0.2, 1);
+  --picker-skeleton-delay: 150ms;
 }

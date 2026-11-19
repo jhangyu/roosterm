@@ -18,6 +18,26 @@ export function applyListing(ws: Workspace, listed: Tab[]): Workspace {
   return { tabs: [...shown.slice(0, pos), active, ...shown.slice(pos)], hidden, activeId: active.id }
 }
 
+const CLAUDE_PROGRAM = "claude"
+
+// Tab label split for display: the folder part never truncates before the summary does.
+// Only a not-renamed Claude Code tab with a non-empty title gets a summary (shells set titles too, so they stay folder-only).
+export function tabParts(tab: Tab): { folder: string; summary: string } {
+  const summary = !tab.renamed && tab.program === CLAUDE_PROGRAM ? tab.title : ""
+  return { folder: tab.label, summary }
+}
+
+export const tabText = (tab: Tab): string => {
+  const { folder, summary } = tabParts(tab)
+  return summary === "" ? folder : `${folder} · ${summary}`
+}
+
+// Live title from the attached terminal's title-change event.
+export const withTitle = (ws: Workspace, id: string, title: string): Workspace => ({
+  ...ws,
+  tabs: ws.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
+})
+
 // Remove one tab by id; if it was active, focus its right neighbour, else its left one.
 export function removeTab(ws: Workspace, id: string): Workspace {
   const at = ws.tabs.findIndex((t) => t.id === id)

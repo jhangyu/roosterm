@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 
 	"roosterm/host/internal/apierr"
 	"roosterm/host/internal/hc"
@@ -28,6 +29,7 @@ type Tab struct {
 	Cwd      string  `json:"cwd"` // relative to home, "" = home
 	Title    string  `json:"title"`
 	Renamed  bool    `json:"renamed"`
+	Program  string  `json:"program"` // basename of argv[0]; "claude" marks a Claude Code tab
 }
 
 type server struct{ o Options }
@@ -51,7 +53,15 @@ func New(o Options) http.Handler {
 func toTab(home string, t hc.Terminal) Tab {
 	return Tab{ID: t.Address, Label: t.Labels[hc.LabelName], Exited: t.State == hc.StateFinished,
 		ExitCode: t.ExitCode, Signal: t.Signal, Reason: t.Reason, Hidden: t.Labels[hc.LabelHidden] == hc.LabelHiddenOn,
-		Cwd: relCwd(home, t.Cwd), Title: t.Title, Renamed: t.Labels[hc.LabelRenamed] == hc.LabelRenamedOn}
+		Cwd: relCwd(home, t.Cwd), Title: t.Title, Renamed: t.Labels[hc.LabelRenamed] == hc.LabelRenamedOn,
+		Program: program(t.Argv)}
+}
+
+func program(argv []string) string {
+	if len(argv) == 0 {
+		return ""
+	}
+	return filepath.Base(argv[0])
 }
 
 // hcError maps an hc failure to the API error table.

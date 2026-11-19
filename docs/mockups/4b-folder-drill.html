@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<!--
+  Roosterm — Mockup 4b · Folder picker, drill-down navigator (New session dialog) — IMPLEMENTATION SPEC
+
+  RATIONALE
+  - One list, one level at a time. A Fluent 2 breadcrumb (~ › project › roosterm) shows where you are; the list below
+    shows only that folder's children. Tap a row = go in; tap a crumb = go up. Every target is a full-width row
+    (40 px pointer, 48 px touch).
+  - "The folder you are in is the folder you get." No second selection step: the current breadcrumb folder is the
+    start folder, echoed under the list ("Starts in ~/project/roosterm") and in the primary button
+    ("Open Claude Code in roosterm" / "Open shell in roosterm"). Navigating is only needed to start elsewhere.
+  - Remembered path: the dialog opens inside the last used folder (the drill-down equivalent of a tree expanded to it).
+    Recent folders (max 5) are chips above the list for cross-branch jumps.
+  - Session types: Shell (login shell in the folder), Claude Code (runs `claude` in the folder), Swarm (attaches to an
+    existing socket — no folder, picker hidden).
+  - Same component on desktop and phone (single list, no Finder columns: columns need >= 600 px, cannot fit 390 px,
+    and would fork the UI per platform). Desktop gets keyboard drive; phone gets a bottom sheet, a 48 px segmented
+    session-type row and 48 px rows.
+  - Dot folders hidden by default, one tap away ("N hidden folders · Show", remembered with the path); shown
+    automatically when the filter starts with "." or the path is inside a dot folder.
+  - Folders whose contents can't be listed stay selectable; the error is shown with cause, path and user. Only a folder
+    that no longer exists disables Open.
+  - Tab label: "<folder> · <summary>" for Claude Code; the summary truncates first. Shell tabs show the folder only.
+    A tab renamed by the user keeps its label and no longer gets the summary. Duplicate folder-only labels are accepted.
+  - Scrim stays the app's 28 % token (consistent with existing dialogs).
+
+  M3 CORNER RADIUS MAPPING (md.sys.shape.corner.*)
+  - extra-large 28: dialog (desktop), bottom-sheet top corners (phone)
+  - large 16:       terminal card behind the dialog
+  - medium 12:      picker container, session-type tiles, rail session cards
+  - small 8:        folder rows, breadcrumb segments, filter field, buttons, icon buttons, inline notices
+  - extra-small 4:  breadcrumb overflow menu (M3 menu), skeleton bars, kbd hints, match highlight
+  - full:           phone segmented row (M3 segmented button), Recent chips, phone tab chips, badges, dots,
+                    current-crumb indicator
+  Fluent 2 supplies colour, type ramp, elevation (shadow 2/4/16/64), focus ring and iconography (regular-20).
+
+  WHAT THE DESIGN SKILLS CHANGED (ui-ux-pro-max, design-system, design, frontend-design)
+  - ui-ux-pro-max: "filter finds nothing" state with recovery; live regions (status / alert); filter input without
+    autocapitalise / autocorrect, enterkeyhint=go; 150 ms colour transitions, touch-action: manipulation; list
+    overscroll contained; no text under 12 px; safe-area padding on the sheet action bar; plain labelled list (not a
+    listbox of buttons); predictable Back (Back / Esc always closes, going up is only the breadcrumb).
+    Not applied: its generated design system (dark slate, JetBrains Mono via Google Fonts) — conflicts with Fluent 2 /
+    mockup 3 and the no-network rule; its 40-60 % scrim — the app's 28 % token kept (lead decision).
+  - design-system: three-layer tokens (semantic overlays, --picker-* / --seg-* component tokens); section 05 is the
+    component spec: sizes, states, navigation, component state matrix.
+  - design: router to design-system (applied) and ui-styling. shadcn map: Dialog, RadioGroup (tiles / segmented),
+    Breadcrumb + DropdownMenu (overflow), Input (filter), ScrollArea + virtual list, Button, Badge/chip.
+    Logo, CIP, banner, slide parts do not apply.
+  - frontend-design: Fluent's Segoe stack and mockup 3's Mica kept over its font/background advice (the brief fixes
+    the visual language). Applied its "one orchestrated moment": direction-aware folder motion, and a brand bar under
+    the current crumb that echoes the rail's active-card indicator.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roosterm — Mockup 4b · Folder picker, drill-down</title>
+<style>
+:root {
+  --brand-60: #0f548c; --brand-70: #115ea3; --brand-80: #0f6cbd; --brand-140: #b4d6fa; --brand-150: #cfe4fa; --brand-160: #ebf3fc;
+  --grey-14: #242424; --grey-26: #424242; --grey-38: #616161; --grey-74: #bdbdbd; --grey-82: #d1d1d1; --grey-88: #e0e0e0;
+  --grey-90: #e6e6e6; --grey-92: #ebebeb; --grey-94: #f0f0f0; --grey-96: #f5f5f5; --grey-98: #fafafa;
+  --background: #f3f3f3; --foreground: var(--grey-14); --card: #ffffff; --popover: #ffffff;
+  --primary: var(--brand-80); --primary-hover: var(--brand-70); --primary-foreground: #fff;
+  --muted-foreground: var(--grey-38); --accent: var(--brand-160); --border: var(--grey-88); --input: var(--grey-82);
+  --surface-acrylic: rgba(252, 252, 252, 0.72);
+  --destructive: #b10e1c; --destructive-bg: #fdf3f4; --destructive-border: #eeacb2;
+  --success: #0e700e; --success-bg: #f1faf1; --success-border: #9fd89f;
+  --warning: #bc4b09; --warning-bg: #fff9f5; --warning-border: #fdcfb4;
+  --radius-xs: 4px; --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 28px; --radius-full: 9999px;
+  --shadow-2: 0 0 2px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.14);
+  --shadow-4: 0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14);
+  --shadow-8: 0 0 2px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.14);
+  --shadow-16: 0 0 2px rgba(0,0,0,.12), 0 8px 16px rgba(0,0,0,.14);
+  --shadow-28: 0 0 8px rgba(0,0,0,.12), 0 14px 28px rgba(0,0,0,.14);
+  --shadow-64: 0 0 8px rgba(0,0,0,.12), 0 32px 64px rgba(0,0,0,.14);
+  --font-sans: 'Segoe UI Variable Text', 'Segoe UI', 'Segoe UI Web (West European)', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: 'Cascadia Mono', 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
+  --text-caption: 12px; --lh-caption: 16px; --text-body: 14px; --lh-body: 20px;
+  --text-subtitle2: 16px; --lh-subtitle2: 22px; --text-subtitle1: 20px; --lh-subtitle1: 28px;
+  --term-background: #1e1e1e; --term-foreground: #e5e5e5;
+  --dur-fast: 150ms; --dur-gentle: 250ms;
+  --curve-decel: cubic-bezier(0.1, 0.9, 0.2, 1); --curve-ease: cubic-bezier(0.33, 0, 0.67, 1);
+  --dur-normal: 200ms;
+  /* semantic overlays (Fluent subtle fills) */
+  --overlay-hover: rgba(0,0,0,.05); --overlay-press: rgba(0,0,0,.08);
+  /* component layer: folder picker (primitive -> semantic -> component) */
+  --picker-radius: var(--radius-md);
+  --picker-row-h: 40px;          --picker-row-h-touch: 48px;
+  --picker-row-radius: var(--radius-sm);
+  --picker-row-hover: var(--grey-96); --picker-row-press: var(--grey-92);
+  --picker-crumb-h: 36px;        --picker-crumb-h-touch: 44px;
+  --picker-crumb-max: 140px;     --picker-crumb-max-touch: 110px;
+  --picker-crumb-indicator: var(--primary);
+  --picker-filter-h: 40px;       --picker-filter-h-touch: 48px;
+  --picker-list-h: 240px;
+  --picker-menu-radius: var(--radius-xs);
+  --picker-chip-radius: var(--radius-full);
+  --picker-drill-dur: var(--dur-normal); --picker-drill-shift: 24px;
+}
+* { box-sizing: border-box; }
+html { color-scheme: light; }
+body { margin: 0; font: var(--text-body)/var(--lh-body) var(--font-sans); color: var(--foreground); background: var(--background); -webkit-font-smoothing: antialiased; }
+svg.ic { width: 20px; height: 20px; fill: currentColor; flex: none; }
+svg.ic.sm { width: 16px; height: 16px; }
+.mono { font-family: var(--font-mono); }
+button { font: inherit; color: inherit; }
+
+/* ---------- doc chrome (as mockup 3) ---------- */
+.doc { max-width: 1320px; margin: 0 auto; padding: 56px 32px 120px; }
+.doc-head { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; margin-bottom: 48px; }
+.eyebrow { font-size: var(--text-caption); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); font-weight: 600; }
+.doc h1 { font-size: 40px; line-height: 52px; font-weight: 600; margin: 8px 0 12px; letter-spacing: -0.01em; }
+.doc-head p { margin: 0 0 12px; color: var(--grey-26); font-size: var(--text-subtitle2); line-height: 24px; max-width: 58ch; }
+.card-note { background: var(--card); border-radius: var(--radius-lg); box-shadow: var(--shadow-4); padding: 20px 24px; }
+.card-note h3 { margin: 0 0 8px; font-size: var(--text-subtitle2); line-height: var(--lh-subtitle2); font-weight: 600; }
+.card-note ul { margin: 0; padding-left: 18px; color: var(--grey-26); }
+.card-note li { margin: 6px 0; }
+.card-note b { color: var(--foreground); font-weight: 600; }
+.screen { margin-bottom: 88px; }
+.screen-label { display: flex; align-items: baseline; gap: 14px; margin: 0 0 18px; flex-wrap: wrap; }
+.screen-label .num { font-family: var(--font-mono); font-size: 12px; color: var(--primary); background: var(--brand-160); border-radius: var(--radius-full); padding: 2px 10px; font-weight: 600; }
+.screen-label h2 { margin: 0; font-size: var(--text-subtitle1); line-height: var(--lh-subtitle1); font-weight: 600; }
+.screen-label .note { color: var(--muted-foreground); }
+.stage-scroll { overflow-x: auto; padding: 4px 4px 12px; margin: -4px; }
+.mica {
+  position: relative; overflow: hidden; border-radius: var(--radius-xl); box-shadow: var(--shadow-8);
+  background:
+    radial-gradient(1200px 600px at 8% -10%, rgba(207, 228, 250, .75), transparent 60%),
+    radial-gradient(900px 520px at 100% 110%, rgba(235, 228, 245, .7), transparent 62%),
+    radial-gradient(700px 400px at 70% 0%, rgba(253, 240, 232, .55), transparent 60%), #f3f3f3;
+}
+.cap { color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--lh-caption); margin: 10px 4px 0; }
+.cap b { color: var(--foreground); font-weight: 600; }
+
+/* ---------- controls (as mockup 3) ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 16px;
+  border-radius: var(--radius-sm); white-space: nowrap; font: 600 var(--text-body)/var(--lh-body) var(--font-sans);
+  border: 1px solid var(--input); background: var(--card); color: var(--foreground); cursor: pointer;
+}
+.btn:hover { background: var(--grey-96); }
+.btn.primary { background: var(--primary); border-color: transparent; color: #fff; }
+.btn.primary:hover { background: var(--primary-hover); }
+.btn.primary[disabled] { background: var(--grey-94); color: var(--grey-74); cursor: not-allowed; }
+.btn.subtle { background: transparent; border-color: transparent; }
+.btn.subtle:hover { background: var(--overlay-hover); }
+.btn.lg { height: 44px; padding: 0 20px; }
+.btn.sm { height: 28px; padding: 0 10px; font-size: var(--text-caption); }
+.icon-btn { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-sm); border: 0; background: transparent; color: var(--grey-26); cursor: pointer; }
+.icon-btn:hover { background: var(--overlay-hover); }
+:is(.btn, .icon-btn, .row, .crumb, .chip, .choice):focus-visible, .is-focus { outline: 2px solid var(--grey-14); outline-offset: -2px; box-shadow: inset 0 0 0 3px #fff; }
+:is(.btn, .icon-btn, .row, .crumb, .chip, .choice) { touch-action: manipulation; transition: background-color var(--dur-fast) var(--curve-ease), color var(--dur-fast) var(--curve-ease), border-color var(--dur-fast) var(--curve-ease); }
+kbd { font-family: var(--font-mono); font-size: 11px; color: var(--grey-38); border: 1px solid var(--grey-88); border-bottom-width: 2px; border-radius: var(--radius-xs); padding: 0 5px; background: var(--card); }
+.dot { width: 8px; height: 8px; border-radius: var(--radius-full); background: currentColor; flex: none; }
+.dot.live { color: var(--success); animation: breathe 2.4s var(--curve-ease) infinite; }
+@keyframes breathe { 50% { opacity: .35; } }
+
+/* ---------- dialog (mockup 3 screen 03) ---------- */
+.dialog-stage { height: 900px; display: grid; place-items: center; }
+.ghost { position: absolute; inset: 0; display: grid; grid-template-columns: 288px 1fr; }
+.ghost .g-rail { background: var(--surface-acrylic); border-right: 1px solid rgba(0,0,0,.06); }
+.ghost .g-card { margin: 92px 28px 28px; background: var(--term-background); border-radius: var(--radius-lg); box-shadow: var(--shadow-8); }
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.28); z-index: 1; }
+.dialog { position: relative; z-index: 2; width: 560px; background: var(--popover); border-radius: var(--radius-xl); box-shadow: var(--shadow-64); padding: 28px 28px 24px; }
+.dialog-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
+.dialog h3 { margin: 0; font-size: var(--text-subtitle1); line-height: var(--lh-subtitle1); font-weight: 600; }
+.lead { margin: 0 0 22px; color: var(--muted-foreground); }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 22px; }
+.choice { display: grid; grid-template-columns: 40px 1fr 20px; gap: 12px; align-items: start; text-align: left; padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--grey-88); background: var(--card); cursor: pointer; }
+.choice .glyph { width: 40px; height: 40px; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--grey-94); color: var(--grey-26); }
+.choice b { display: block; font-weight: 600; }
+.choice small { color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--lh-caption); }
+.choice.selected { border: 2px solid var(--primary); padding: 15px; background: var(--brand-160); }
+.choice.selected .glyph { background: #fff; color: var(--primary); }
+.radio { width: 20px; height: 20px; border-radius: var(--radius-full); border: 1px solid var(--grey-38); display: grid; place-items: center; background: #fff; }
+.radio.on { border-color: var(--primary); }
+.radio.on::after { content: ""; width: 10px; height: 10px; border-radius: var(--radius-full); background: var(--primary); }
+.sec-label { display: flex; justify-content: space-between; align-items: baseline; margin: 0 0 8px; gap: 12px; }
+.sec-label b { font-weight: 600; }
+.sec-label small { color: var(--muted-foreground); font-size: var(--text-caption); }
+.dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.dialog-actions .hints { margin-right: auto; display: flex; gap: 6px; white-space: nowrap; color: var(--muted-foreground); font-size: var(--text-caption); align-items: center; }
+.hidden-sessions { border: 1px solid var(--grey-88); border-radius: var(--radius-md); margin-bottom: 24px; }
+.hs-row { display: flex; align-items: center; gap: 12px; padding: 6px 6px 6px 16px; }
+.hs-row span { flex: 1; min-width: 0; }
+.hs-row b { display: block; font-weight: 600; }
+.hs-row small { display: block; font-family: var(--font-mono); font-size: var(--text-caption); color: var(--muted-foreground); }
+
+/* ---------- recent chips ---------- */
+.recent { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; overflow-x: auto; scrollbar-width: none; }
+.recent > .lbl { display: inline-flex; align-items: center; gap: 4px; color: var(--muted-foreground); font-size: var(--text-caption); flex: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--picker-chip-radius); flex: none;
+  background: var(--card); border: 1px solid var(--grey-88); font-size: 13px; font-weight: 600; color: var(--grey-26); white-space: nowrap; cursor: pointer;
+}
+.chip:hover { background: var(--grey-96); }
+.chip.on { background: var(--brand-160); border-color: var(--brand-150); color: var(--brand-60); }
+.chip small { font-weight: 400; color: var(--muted-foreground); }
+
+/* ---------- picker ---------- */
+.picker { border: 1px solid var(--grey-88); border-radius: var(--picker-radius); background: var(--card); overflow: hidden; display: flex; flex-direction: column; }
+.pk-bar { display: flex; align-items: center; gap: 2px; padding: 4px; border-bottom: 1px solid var(--grey-94); background: var(--grey-98); min-height: 44px; position: relative; }
+.crumbs { display: flex; align-items: center; min-width: 0; flex: 1; }
+.crumb {
+  display: inline-block; line-height: var(--picker-crumb-h); height: var(--picker-crumb-h); padding: 0 8px; border-radius: var(--radius-sm); border: 0; background: transparent;
+  color: var(--grey-38); cursor: pointer; white-space: nowrap; flex: none; max-width: var(--picker-crumb-max); overflow: hidden; text-overflow: ellipsis;
+}
+.crumb:hover { background: var(--overlay-hover); color: var(--foreground); }
+.crumb.home { font-family: var(--font-mono); font-weight: 600; }
+.crumb.cur { position: relative; color: var(--foreground); font-weight: 600; cursor: default; flex: 0 1 auto; min-width: 0; max-width: none; display: block; line-height: var(--picker-crumb-h); }
+.crumb.cur::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 2px; height: 3px; border-radius: var(--radius-full); background: var(--picker-crumb-indicator); } /* Fluent selection indicator, same as the rail's active card */
+.crumb.cur:hover { background: transparent; }
+.crumb.more { padding: 0; width: 36px; display: inline-grid; place-items: center; }
+.crumb.more.open { background: var(--overlay-press); color: var(--foreground); }
+.sep { display: inline-grid; color: var(--grey-74); flex: none; }
+.sep svg.ic { width: 12px; height: 12px; }
+.menu { position: absolute; left: 44px; top: 42px; z-index: 5; min-width: 220px; background: var(--popover); border-radius: var(--picker-menu-radius); box-shadow: var(--shadow-16); padding: 4px; }
+.menu button { display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 10px; border: 0; background: transparent; border-radius: var(--radius-xs); cursor: pointer; text-align: left; }
+.menu button:hover { background: var(--grey-96); }
+.menu button svg { color: var(--grey-38); }
+.menu button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu button.indent1 { padding-left: 22px; } .menu button.indent2 { padding-left: 34px; } .menu button.indent3 { padding-left: 46px; }
+.pk-filter { display: flex; align-items: center; gap: 8px; height: var(--picker-filter-h); padding: 0 12px; border-bottom: 1px solid var(--grey-94); color: var(--grey-38); }
+.pk-filter input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; font: inherit; color: var(--foreground); background: transparent; }
+.pk-filter input::placeholder { color: var(--grey-38); }
+.pk-filter.active { box-shadow: inset 0 -2px 0 var(--primary); } /* Fluent focus underline */
+.pk-filter .count { font-size: var(--text-caption); color: var(--muted-foreground); white-space: nowrap; }
+.pk-list { list-style: none; margin: 0; padding: 4px; overflow-y: auto; height: var(--picker-list-h); scrollbar-width: thin; overscroll-behavior: contain; } /* no scroll chaining into the sheet / pull-to-refresh */
+.row {
+  display: grid; grid-template-columns: 20px 1fr auto 16px; gap: 12px; align-items: center; width: 100%; height: var(--picker-row-h); padding: 0 10px 0 12px;
+  border: 0; background: transparent; border-radius: var(--picker-row-radius); text-align: left; cursor: pointer; color: var(--foreground);
+}
+.row:hover, .row.hover { background: var(--picker-row-hover); }
+.row.press, .row:active { background: var(--picker-row-press); }
+.row > svg:first-child { color: var(--grey-38); }
+.row .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .tag { font-size: var(--text-caption); color: var(--muted-foreground); }
+.row .go { color: var(--grey-74); }
+.row.dotf .nm { color: var(--grey-38); }
+.row.off { cursor: not-allowed; color: var(--grey-74); }
+.row.off > svg:first-child, .row.off .tag { color: var(--grey-74); }
+.row mark { background: var(--brand-150); color: inherit; border-radius: var(--radius-xs); padding: 0 1px; }
+.pk-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 14px; color: var(--muted-foreground); font-size: var(--text-caption); border-top: 1px solid var(--grey-94); }
+.pk-foot .btn { height: 28px; }
+.starts { display: flex; align-items: center; gap: 8px; white-space: nowrap; margin: 10px 2px 22px; color: var(--muted-foreground); font-size: var(--text-caption); min-width: 0; }
+.starts code { font-family: var(--font-mono); color: var(--foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; min-width: 0; }
+.starts.warn, .starts.warn code { color: var(--warning); }
+.starts.bad code { color: var(--destructive); }
+/* drill motion: going in slides the new list from the right, going up from the left (spatial continuity) */
+.pk-list.drill-in { animation: drill-in var(--picker-drill-dur) var(--curve-decel) both; }
+.pk-list.drill-up { animation: drill-up var(--picker-drill-dur) var(--curve-decel) both; }
+@keyframes drill-in { from { opacity: 0; transform: translateX(var(--picker-drill-shift)); } }
+@keyframes drill-up { from { opacity: 0; transform: translateX(calc(-1 * var(--picker-drill-shift))); } }
+/* states */
+.sk { display: grid; grid-template-columns: 20px 1fr; gap: 12px; align-items: center; height: 40px; padding: 0 12px; }
+.sk i { display: block; height: 12px; border-radius: var(--radius-xs); background: linear-gradient(90deg, var(--grey-94) 0, var(--grey-96) 40%, var(--grey-94) 80%); background-size: 300% 100%; animation: shimmer 1.4s var(--curve-ease) infinite; }
+.sk i:first-child { height: 16px; width: 18px; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.pk-empty { height: 100%; display: grid; place-content: center; justify-items: center; text-align: center; gap: 6px; padding: 16px 24px; color: var(--muted-foreground); }
+.pk-empty .big { width: 48px; height: 48px; border-radius: var(--radius-md); display: grid; place-items: center; background: var(--grey-96); color: var(--grey-38); margin-bottom: 4px; }
+.pk-empty b { color: var(--foreground); font-weight: 600; font-size: var(--text-subtitle2); line-height: var(--lh-subtitle2); }
+.pk-empty.err .big { background: var(--destructive-bg); color: var(--destructive); }
+.pk-empty .btns { display: flex; gap: 8px; margin-top: 8px; }
+.notice { display: flex; align-items: flex-start; gap: 10px; margin: 4px 4px 2px; padding: 8px 10px; border-radius: var(--radius-sm); font-size: var(--text-caption); line-height: var(--lh-caption); background: var(--warning-bg); box-shadow: inset 0 0 0 1px var(--warning-border); color: var(--grey-26); }
+.notice svg { color: var(--warning); }
+.notice .mono { color: var(--foreground); }
+.loading-note { display: flex; align-items: center; gap: 8px; padding: 6px 12px 2px; color: var(--muted-foreground); font-size: var(--text-caption); }
+.spinner { width: 14px; height: 14px; border-radius: var(--radius-full); border: 2px solid var(--brand-150); border-top-color: var(--primary); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.scrollthumb { position: relative; }
+.scrollthumb::after { content: ""; position: absolute; right: 2px; top: 30%; width: 4px; height: 28px; border-radius: var(--radius-xs); background: var(--grey-74); }
+
+/* ---------- state grid ---------- */
+.state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 32px; padding: 32px; }
+.state { background: var(--popover); border-radius: var(--radius-xl); box-shadow: var(--shadow-16); padding: 20px 24px 18px; }
+.state h4 { margin: 0 0 12px; display: flex; align-items: center; gap: 10px; font-size: var(--text-body); font-weight: 600; }
+.state h4 .badge { font-size: var(--text-caption); font-weight: 600; padding: 1px 8px; border-radius: var(--radius-full); background: var(--brand-160); color: var(--brand-60); }
+.state .starts { margin-bottom: 4px; }
+.spec { width: 100%; border-collapse: collapse; font-size: var(--text-caption); line-height: var(--lh-caption); }
+.spec th, .spec td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grey-94); vertical-align: top; }
+.spec th { color: var(--muted-foreground); font-weight: 600; }
+.spec td:first-child { font-weight: 600; white-space: nowrap; }
+.state .row-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+/* ---------- phone ---------- */
+.phone-row { display: flex; gap: 36px; align-items: flex-start; flex-wrap: wrap; }
+.phone-col { flex: none; width: 390px; }
+.phone { width: 390px; height: 844px; border-radius: 48px; padding: 10px; background: #1b1b1b; box-shadow: var(--shadow-28); }
+.phone-screen { position: relative; height: 100%; border-radius: 38px; overflow: hidden; background: #f3f3f3; }
+.statusbar { position: absolute; z-index: 4; top: 0; left: 0; right: 0; height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 13px; font-weight: 600; }
+.statusbar .cam { width: 12px; height: 12px; border-radius: var(--radius-full); background: #1b1b1b; }
+.p-ghost { position: absolute; inset: 36px 0 0; }
+.p-ghost .t { height: 44px; margin: 6px 16px; border-radius: var(--radius-sm); background: rgba(0,0,0,.04); }
+.p-ghost .c { position: absolute; inset: 104px 10px 10px; border-radius: var(--radius-lg); background: var(--term-background); }
+.phone .scrim { z-index: 2; }
+.sheet {
+  position: absolute; z-index: 3; left: 0; right: 0; top: 48px; bottom: 0; background: var(--popover);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0; box-shadow: var(--shadow-64); display: flex; flex-direction: column;
+}
+.sheet .grab { width: 32px; height: 4px; border-radius: var(--radius-full); background: var(--grey-82); margin: 8px auto 4px; flex: none; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 20px; flex: none; }
+.sheet-head h3 { margin: 0; font-size: var(--text-subtitle1); line-height: var(--lh-subtitle1); font-weight: 600; }
+.sheet-head .icon-btn { width: 44px; height: 44px; }
+.sheet-body { flex: 1; min-height: 0; padding: 8px 16px 0; display: flex; flex-direction: column; }
+.sheet .recent { flex: none; }
+.sheet .picker { flex: 1; min-height: 0; }
+.sheet .pk-bar { min-height: 52px; }
+.sheet .crumb { height: var(--picker-crumb-h-touch); line-height: var(--picker-crumb-h-touch); padding: 0 10px; max-width: var(--picker-crumb-max-touch); }
+.sheet .crumb.cur { line-height: var(--picker-crumb-h-touch); max-width: none; }
+.sheet .crumb.more { width: 44px; padding: 0; }
+.sheet .pk-filter { height: var(--picker-filter-h-touch); }
+.sheet .pk-list { height: auto; flex: 1; min-height: 0; }
+.sheet .row { height: var(--picker-row-h-touch); }
+.sheet .row .nm { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-all; line-height: 18px; }
+.sheet .pk-foot .btn { height: 44px; }
+.sheet .starts { margin: 8px 2px 0; flex: none; }
+.sheet-actions { flex: none; display: flex; gap: 8px; padding: 12px 16px max(24px, env(safe-area-inset-bottom)); border-top: 1px solid var(--grey-94); margin-top: 10px; background: var(--popover); }
+.sheet-actions .btn { height: 48px; }
+.sheet-actions .btn.primary { flex: 1; }
+.sheet.kb { bottom: 272px; border-radius: var(--radius-xl) var(--radius-xl) 0 0; box-shadow: none; }
+.sheet.kb .sheet-actions { padding-bottom: 12px; }
+.sheet .menu { left: 4px; top: 50px; right: 4px; }
+.sheet .menu button { height: 48px; }
+.ime { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; height: 272px; background: #e9ecef; padding: 10px 4px 22px; display: grid; grid-template-rows: auto repeat(4, 1fr); gap: 8px; }
+.ime .k { text-align: center; font-size: 11px; color: var(--grey-38); }
+.ime-row { display: flex; gap: 5px; justify-content: center; padding: 0 2px; }
+.ime-row span { flex: 1; max-width: 34px; background: #fff; border-radius: 6px; display: grid; place-items: center; font-size: 17px; box-shadow: 0 1px 0 rgba(0,0,0,.12); }
+.ime-row span.w { max-width: none; flex: 1.6; font-size: 12px; background: #d3d7dc; }
+.ime-row span.space { flex: 5; max-width: none; }
+
+/* ---------- tab strip results ---------- */
+.tabs-stage { padding: 28px; display: grid; grid-template-columns: 300px 1fr; gap: 28px; }
+.rail-mini { background: var(--surface-acrylic); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); padding: 16px 12px; display: grid; gap: 6px; align-content: start; }
+.rail-mini .hd { font-size: var(--text-caption); font-weight: 600; color: var(--muted-foreground); letter-spacing: .04em; text-transform: uppercase; padding: 0 8px 6px; }
+.session { position: relative; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px; border-radius: var(--radius-md); }
+.session.active { background: var(--card); box-shadow: var(--shadow-4); }
+.session.active::before { content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 3px; border-radius: var(--radius-full); background: var(--primary); }
+.session .glyph { width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--radius-sm); background: var(--grey-94); color: var(--grey-26); }
+.session.active .glyph { background: var(--brand-160); color: var(--primary); }
+.session .meta { display: block; color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--lh-caption); margin-top: 2px; font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the label: folder keeps its name (max 20ch), summary truncates first */
+.lbl2 { display: flex; min-width: 0; align-items: baseline; white-space: nowrap; }
+.lbl2 .f { font-weight: 600; flex: none; max-width: 20ch; overflow: hidden; text-overflow: ellipsis; }
+.lbl2 .s { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--grey-26); }
+.lbl2 .s::before { content: " · "; white-space: pre; color: var(--grey-74); }
+.lbl2 .s.pending { color: var(--grey-74); font-style: italic; }
+.main-mini { display: grid; gap: 18px; align-content: start; min-width: 0; }
+.head-mini { display: flex; align-items: center; gap: 14px; background: var(--card); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); padding: 14px 18px; min-width: 0; }
+.head-mini .lbl2 { font-size: var(--text-subtitle1); line-height: var(--lh-subtitle1); flex: 1; }
+.head-mini .lbl2 .f { font-weight: 600; } .head-mini .lbl2 .s { font-weight: 400; }
+.head-mini .path { color: var(--muted-foreground); font-family: var(--font-mono); font-size: 12px; flex: none; }
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px; border-radius: var(--radius-full); font-size: var(--text-caption); font-weight: 600; line-height: 1; flex: none; }
+.badge.run { background: var(--success-bg); color: var(--success); box-shadow: inset 0 0 0 1px var(--success-border); }
+.rules { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.rule { background: var(--card); border-radius: var(--radius-md); box-shadow: var(--shadow-2); padding: 12px 16px; display: grid; gap: 4px; min-width: 0; }
+.rule small { color: var(--muted-foreground); font-size: var(--text-caption); line-height: var(--lh-caption); }
+.p-tabs { display: flex; gap: 8px; padding: 12px; overflow: hidden; background: var(--surface-acrylic); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); }
+.p-tabs .chip { max-width: 200px; border-color: rgba(0,0,0,.06); background: rgba(255,255,255,.6); }
+.p-tabs .chip.on { background: var(--card); box-shadow: var(--shadow-4); border-color: transparent; color: var(--foreground); }
+.p-tabs .chip .lbl2 .f { max-width: 12ch; }
+.p-tabs .chip .lbl2 .s { font-weight: 400; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+
+/* ---------- revision 3: three session types, phone segmented row, spec tables ---------- */
+:root { --seg-h: 48px; --seg-radius: var(--radius-full); }
+.choices.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.choice.v { grid-template-columns: 1fr 20px; grid-template-rows: auto auto; padding: 14px; }
+.choice.v.selected { padding: 13px; }
+.choice.v .glyph { width: 32px; height: 32px; grid-column: 1; }
+.choice.v .radio { grid-column: 2; grid-row: 1; }
+.choice.v > span:nth-child(3) { grid-column: 1 / -1; }
+.pk-empty .warn-line { color: var(--grey-26); }
+/* phone segmented control (M3 segmented button shape, Fluent colours) */
+.segm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); height: var(--seg-h); border: 1px solid var(--grey-74); border-radius: var(--seg-radius); overflow: hidden; margin-bottom: 14px; flex: none; }
+.segm button { border: 0; background: var(--card); font-weight: 600; font-size: 13px; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 0 6px; cursor: pointer; }
+.segm button + button { border-left: 1px solid var(--grey-74); }
+.segm button[aria-checked="true"] { background: var(--brand-160); color: var(--brand-60); }
+/* spec section */
+.spec-stage { padding: 28px; display: grid; gap: 24px; }
+.spec-card { background: var(--card); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); padding: 20px 24px; min-width: 0; }
+.spec-card h3 { margin: 0 0 12px; font-size: var(--text-subtitle2); line-height: var(--lh-subtitle2); font-weight: 600; }
+.spec td code { font-family: var(--font-mono); font-size: var(--text-caption); }
+.spec td.ok { color: var(--success); font-weight: 600; } .spec td.no { color: var(--destructive); font-weight: 600; }
+@media (max-width: 1000px) { .doc-head, .state-grid, .tabs-stage, .rules { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="i-folder" viewBox="0 0 20 20"><path d="M4.5 3A2.5 2.5 0 0 0 2 5.5v9A2.5 2.5 0 0 0 4.5 17h11a2.5 2.5 0 0 0 2.5-2.5v-7A2.5 2.5 0 0 0 15.5 5H9.7L8.23 3.51A1.8 1.8 0 0 0 6.98 3zM3 5.5C3 4.67 3.67 4 4.5 4h2.48q.32 0 .53.22L8.8 5.5 7.44 6.85a.5.5 0 0 1-.35.15H3zM3 8h4.09c.4 0 .78-.16 1.06-.44L9.7 6h5.79c.83 0 1.5.67 1.5 1.5v7c0 .83-.67 1.5-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z"/></symbol><symbol id="i-folder_open" viewBox="0 0 20 20"><path d="M3 5.5v6.6l1.5-2.6A3 3 0 0 1 7.1 8H15v-.5c0-.83-.67-1.5-1.5-1.5h-4a.5.5 0 0 1-.35-.15l-1.71-1.7A.5.5 0 0 0 7.09 4H4.5C3.67 4 3 4.67 3 5.5m1.28 10.48.22.02h9.4a2 2 0 0 0 1.73-1l2.17-3.75A1.5 1.5 0 0 0 16.5 9H7.1a2 2 0 0 0-1.73 1L3.2 13.75a1.5 1.5 0 0 0 1.08 2.23M2 14.46V5.5A2.5 2.5 0 0 1 4.5 3h2.59c.4 0 .78.16 1.06.44L9.7 5h3.79A2.5 2.5 0 0 1 16 7.5V8h.5a2.5 2.5 0 0 1 2.16 3.75L16.5 15.5a3 3 0 0 1-2.6 1.5H4.5a2.5 2.5 0 0 1-1.62-.6A2.5 2.5 0 0 1 2 14.46"/></symbol><symbol id="i-chevron_right" viewBox="0 0 20 20"><path d="M7.65 4.15c.2-.2.5-.2.7 0l5.49 5.46c.21.22.21.57 0 .78l-5.49 5.47a.5.5 0 0 1-.7-.71L12.8 10 7.65 4.85a.5.5 0 0 1 0-.7"/></symbol><symbol id="i-history" viewBox="0 0 20 20"><path d="M10 4a6 6 0 1 1-5.98 5.54.5.5 0 1 0-1-.08L3 10a7 7 0 1 0 2-4.9V3.5a.5.5 0 0 0-1 0v3c0 .28.22.5.5.5h3a.5.5 0 0 0 0-1H5.53c1.1-1.23 2.7-2 4.47-2m0 2.5a.5.5 0 0 0-1 0v4c0 .28.22.5.5.5h3a.5.5 0 0 0 0-1H10z"/></symbol><symbol id="i-search" viewBox="0 0 20 20"><path d="M13.73 14.44a6.5 6.5 0 1 1 .7-.7l3.42 3.4a.5.5 0 0 1-.63.77l-.07-.06zm-.71-.71A5.5 5.5 0 0 0 15 9.5a5.5 5.5 0 1 0-1.98 4.23"/></symbol><symbol id="i-error_circle" viewBox="0 0 20 20"><path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16m0 1a7 7 0 1 0 0 14 7 7 0 0 0 0-14m0 9.5a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5M10 6a.5.5 0 0 1 .5.41V11a.5.5 0 0 1-1 .09V6.5c0-.28.22-.5.5-.5"/></symbol><symbol id="i-lock_closed" viewBox="0 0 20 20"><path d="M10 1a4 4 0 0 1 4 4v2.05a2.5 2.5 0 0 1 2 2.45v6a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 4 15.5v-6c0-1.2.86-2.22 2-2.45V5a4 4 0 0 1 4-4M6.5 8C5.67 8 5 8.67 5 9.5v6c0 .83.67 1.5 1.5 1.5h7c.83 0 1.5-.67 1.5-1.5v-6c0-.83-.67-1.5-1.5-1.5zm3.5 3.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2M10 2a3 3 0 0 0-3 3v2h6V5a3 3 0 0 0-3-3"/></symbol><symbol id="i-eye" viewBox="0 0 20 20"><path d="M3.26 11.6A7 7 0 0 1 10 6c3.2 0 6.06 2.33 6.74 5.6a.5.5 0 0 0 .98-.2A8 8 0 0 0 10 5a8 8 0 0 0-7.72 6.4.5.5 0 0 0 .98.2M10 8a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7m-2.5 3.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0"/></symbol><symbol id="i-eye_off" viewBox="0 0 20 20"><path d="M2.85 2.15a.5.5 0 1 0-.7.7l3.5 3.5a8 8 0 0 0-3.37 5.05.5.5 0 1 0 .98.2 7 7 0 0 1 3.1-4.53l1.6 1.59a3.5 3.5 0 1 0 4.88 4.89l4.3 4.3a.5.5 0 0 0 .71-.7zm9.27 10.68a2.5 2.5 0 1 1-3.45-3.45zm-2-4.83 3.38 3.38A3.5 3.5 0 0 0 10.12 8M10 6q-.86 0-1.67.21l-.8-.8A8 8 0 0 1 10 5c3.7 0 6.94 2.67 7.72 6.4a.5.5 0 0 1-.98.2A7 7 0 0 0 10 6"/></symbol><symbol id="i-arrow_up" viewBox="0 0 20 20"><path d="M3.13 9.16a.5.5 0 1 0 .74.68L9.5 3.67V17.5a.5.5 0 1 0 1 0V3.67l5.63 6.17a.5.5 0 0 0 .74-.68l-6.32-6.92a.75.75 0 0 0-1.1 0z"/></symbol><symbol id="i-checkmark" viewBox="0 0 20 20"><path d="M3.37 10.17a.5.5 0 0 0-.74.66l4 4.5c.19.22.52.23.72.02l10.5-10.5a.5.5 0 0 0-.7-.7L7.02 14.27z"/></symbol><symbol id="i-folder_link" viewBox="0 0 20 20"><path d="M4.5 3A2.5 2.5 0 0 0 2 5.5v9A2.5 2.5 0 0 0 4.5 17h4.84a4 4 0 0 1-.3-1H4.5A1.5 1.5 0 0 1 3 14.5V8h4.09c.4 0 .78-.16 1.06-.44L9.7 6h5.79c.83 0 1.5.67 1.5 1.5v4.54q.53.07 1 .3V7.5A2.5 2.5 0 0 0 15.5 5H9.7L8.23 3.51A1.8 1.8 0 0 0 6.98 3zM3 5.5C3 4.67 3.67 4 4.5 4h2.48q.32 0 .53.22L8.8 5.5 7.44 6.85a.5.5 0 0 1-.35.15H3zm9.5 7.5a2.5 2.5 0 0 0 0 5h.5a.5.5 0 0 0 0-1h-.5a1.5 1.5 0 0 1 0-3h.5a.5.5 0 0 0 0-1zm3.5 0a.5.5 0 0 0 0 1h.5a1.5 1.5 0 0 1 0 3H16a.5.5 0 0 0 0 1h.5a2.5 2.5 0 0 0 0-5zm-4 2.5c0-.28.22-.5.5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5"/></symbol><symbol id="i-arrow_clockwise" viewBox="0 0 20 20"><path d="M4 10a6 6 0 0 1 10.47-4H12.5a.5.5 0 0 0 0 1h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-1 0v1.6a7 7 0 1 0 1.98 4.36.5.5 0 1 0-1 .08L16 10a6 6 0 0 1-12 0"/></symbol><symbol id="i-dismiss" viewBox="0 0 20 20"><path d="m4.09 4.22.06-.07a.5.5 0 0 1 .63-.06l.07.06L10 9.29l5.15-5.14a.5.5 0 0 1 .63-.06l.07.06c.18.17.2.44.06.63l-.06.07L10.71 10l5.14 5.15c.18.17.2.44.06.63l-.06.07a.5.5 0 0 1-.63.06l-.07-.06L10 10.71l-5.15 5.14a.5.5 0 0 1-.63.06l-.07-.06a.5.5 0 0 1-.06-.63l.06-.07L9.29 10 4.15 4.85a.5.5 0 0 1-.06-.63l.06-.07z"/></symbol><symbol id="i-window_console" viewBox="0 0 20 20"><path d="M5.65 9.15c.2-.2.5-.2.7 0l2 2a.5.5 0 0 1 0 .7l-2 2a.5.5 0 0 1-.7-.7l1.64-1.65-1.64-1.65a.5.5 0 0 1 0-.7M14.5 13h-5a.5.5 0 0 0 0 1h5a.5.5 0 0 0 0-1M3 5.5A2.5 2.5 0 0 1 5.5 3h9A2.5 2.5 0 0 1 17 5.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 3 14.5zM16 6v-.5c0-.83-.68-1.5-1.5-1.5h-9C4.67 4 4 4.67 4 5.5V6zM4 7v7.5c0 .83.67 1.5 1.5 1.5h9c.82 0 1.5-.67 1.5-1.5V7z"/></symbol><symbol id="i-bot" viewBox="0 0 20 20"><path d="M12 5.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-5 1a1 1 0 1 1 2 0 1 1 0 0 1-2 0m3.5-4a.5.5 0 0 0-1 0V3h-3C5.67 3 5 3.67 5 4.5v4c0 .83.67 1.5 1.5 1.5h7c.83 0 1.5-.67 1.5-1.5v-4c0-.83-.67-1.5-1.5-1.5h-3zM6.5 4h7c.28 0 .5.22.5.5v4a.5.5 0 0 1-.5.5h-7a.5.5 0 0 1-.5-.5v-4c0-.28.22-.5.5-.5m3.75 14c2.62-.04 4.2-.6 5.12-1.44A3.5 3.5 0 0 0 16.5 14h.01v-.69c0-1-.81-1.8-1.8-1.8h-3.2v-.01H5.3c-.99 0-1.8.81-1.8 1.81v.7c.04.77.25 1.75 1.13 2.55.93.84 2.5 1.4 5.12 1.44zm-4.94-5.5h9.38c.45 0 .81.37.81.81v.44c0 .69-.13 1.46-.8 2.07C14 16.45 12.66 17 10 17s-4.01-.55-4.7-1.18a2.6 2.6 0 0 1-.8-2.07v-.44c0-.44.36-.8.8-.8"/></symbol><symbol id="i-people_team" viewBox="0 0 20 20"><path d="M10 3a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3M7.5 4.5a2.5 2.5 0 1 1 5 0 2.5 2.5 0 0 1-5 0m8-.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2m-2 1a2 2 0 1 1 4 0 2 2 0 0 1-4 0m-10 0a1 1 0 1 1 2 0 1 1 0 0 1-2 0m1-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4m.6 12H5a2 2 0 0 1-2-2V9.25c0-.14.11-.25.25-.25h1.76q.06-.55.37-1H3.25C2.56 8 2 8.56 2 9.25V13a3 3 0 0 0 3.4 2.97 5 5 0 0 1-.3-.97m9.5.97q.2.03.4.03a3 3 0 0 0 3-3V9.25C18 8.56 17.44 8 16.75 8h-2.13q.3.45.37 1h1.76q.23.02.25.25V13a2 2 0 0 1-2.1 2q-.1.5-.3.97M7.25 8C6.56 8 6 8.56 6 9.25V14a4 4 0 0 0 8 0V9.25C14 8.56 13.44 8 12.75 8zM7 9.25c0-.14.11-.25.25-.25h5.5q.23.02.25.25V14a3 3 0 1 1-6 0z"/></symbol><symbol id="i-more_horizontal" viewBox="0 0 20 20"><path d="M6.25 10a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0m5 0a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0M15 11.25a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5"/></symbol><symbol id="i-warning" viewBox="0 0 20 20"><path d="M7.37 3.56a3 3 0 0 1 5.26 0l5.5 10A3 3 0 0 1 15.5 18h-11a3 3 0 0 1-2.63-4.44zm4.38.48a2 2 0 0 0-3.5 0l-5.5 10A2 2 0 0 0 4.5 17h11a2 2 0 0 0 1.75-2.96zM10 12.75a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5m0-6.25c.28 0 .5.22.5.5v4a.5.5 0 0 1-1 0V7c0-.28.22-.5.5-.5"/></symbol></svg>
+<main class="doc">
+
+  <header class="doc-head">
+    <div>
+      <div class="eyebrow">Roosterm · Mockup 4b · New session · Folder picker · implementation spec</div>
+      <h1>Drill-down navigator</h1>
+      <p>One folder at a time. A tappable breadcrumb says where you are, a single list shows what is inside, and the folder you are standing in is the folder the session starts in. The dialog opens already inside the last folder you used.</p>
+      <p style="font-size:14px;line-height:20px;color:var(--muted-foreground)">Builds on mockup 3 (calm surfaces): same tokens, dialog and tiles. Shell and Claude Code use the picker; Swarm attaches to an existing socket and keeps the socket list. Section 05 lists every size, state and navigation rule.</p>
+    </div>
+    <aside class="card-note">
+      <h3>Key decisions and trade-offs</h3>
+      <ul>
+        <li><b>No second selection step.</b> The current breadcrumb folder is the start folder; the primary button names it (<i>Open Claude Code in roosterm</i>). The remembered folder is preselected, so the common case is one tap.</li>
+        <li><b>Single list on desktop too</b>, not Finder columns: columns need ≥ 600 px, cannot exist on a 390 px phone, and would fork the component per platform. Desktop gets full keyboard drive instead.</li>
+        <li><b>Recent folders as chips</b> cover the cross-branch jump a tree gives for free.</li>
+        <li><b>Dot folders hidden, one tap away;</b> auto-shown for “.” filters and dot paths.</li>
+        <li><b>Unlistable folders stay selectable</b> with the error shown; only a vanished folder disables Open.</li>
+        <li><b>Phone:</b> full-height bottom sheet, 48 px segmented session type, 48 px rows, sticky actions above the keyboard.</li>
+      </ul>
+    </aside>
+  </header>
+
+  <section class="screen">
+    <div class="screen-label"><span class="num">01</span><h2>Desktop · dialog opens inside the remembered folder</h2><span class="note">Claude Code selected · last used ~/project/roosterm · hovered row · keyboard hints</span></div>
+    <div class="stage-scroll">
+    <div class="mica dialog-stage" style="min-width:1000px;height:1000px">
+      <div class="ghost"><div class="g-rail"></div><div class="g-card"></div></div>
+      <div class="scrim"></div>
+      
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="d1">
+        <div class="dialog-head"><h3 id="d1">New session</h3><button class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-dismiss"/></svg></button></div>
+        <p class="lead">Start a shell or Claude Code on studio-mac, or attach to a running swarm.</p>
+        <div class="choices three" role="radiogroup" aria-label="Session type"><button class="choice v" role="radio" aria-checked="false"><span class="glyph"><svg class="ic"><use href="#i-window_console"/></svg></span><span class="radio"></span><span><b>Shell</b><small>Login shell in the folder below</small></span></button><button class="choice v selected" role="radio" aria-checked="true"><span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span><span class="radio on"></span><span><b>Claude Code</b><small>Runs claude in the folder below</small></span></button><button class="choice v" role="radio" aria-checked="false"><span class="glyph"><svg class="ic"><use href="#i-people_team"/></svg></span><span class="radio"></span><span><b>Swarm</b><small>Attach to a running swarm socket</small></span></button></div>
+        <div class="sec-label"><b>Start in</b><small>Remembered from your last session</small></div>
+        <div class="recent" aria-label="Recent folders"><span class="lbl"><svg class="ic sm"><use href="#i-history"/></svg>Recent</span><button class="chip on" title="~/project/roosterm">roosterm</button><button class="chip" title="~/project/client-api">client-api</button><button class="chip" title="~/dotfiles">dotfiles</button><button class="chip" title="~/work/acme/web">web <small>acme</small></button></div>
+        <div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb" title="project">project</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="roosterm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">roosterm</span></nav></div><label class="pk-filter"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter 9 folders"><span class="count" aria-live="polite">9</span></label><ul class="pk-list drill-in" aria-label="Folders in roosterm"><li><button class="row " title="app"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">app</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="build"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">build</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="docs"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">docs</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row hover" title="host"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">host</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="scripts"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">scripts</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="shared-assets"><svg class="ic"><use href="#i-folder_link"/></svg><span class="nm">shared-assets</span><span class="tag">link</span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row off " disabled title="Resolves to /Volumes/backup — outside your home folder"><svg class="ic"><use href="#i-folder_link"/></svg><span class="nm">backup</span><span class="tag">links outside ~</span><span></span></button></li><li><button class="row " title="web"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">web</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li></ul><div class="pk-foot"><span>3 hidden folders (.git, .github, .vscode)</span><button class="btn subtle sm"><svg class="ic sm"><use href="#i-eye"/></svg>Show</button></div></div>
+        <div class="starts "><svg class="ic sm"><use href="#i-folder_open"/></svg>Starts in <code><span dir="ltr">~/project/roosterm</span></code></div>
+        <div class="sec-label"><b>Hidden sessions</b><small>1</small></div><div class="hidden-sessions"><div class="hs-row"><span><b>dotfiles · Sync zsh aliases</b><small>t-7f3a2c</small></span><button class="btn"><svg class="ic sm"><use href="#i-eye"/></svg>Show</button></div></div>
+        <div class="dialog-actions"><span class="hints"><kbd>↵</kbd>in <kbd>⌫</kbd>up</span><button class="btn">Cancel</button><button class="btn primary">Open Claude Code in roosterm</button></div>
+      </div>
+    </div>
+    </div>
+    <p class="cap"><b>Interaction:</b> click a row = go into it (new list slides in from the right; going up slides in from the left; 200 ms Fluent decelerate). Click a breadcrumb segment = jump up to it. Recent chip = jump anywhere; the highlighted chip is the folder you are in. Typing anywhere in the picker focuses the filter. Symlinks inside ~ open normally; ones that resolve outside ~ are listed but disabled, with the reason in a tooltip.</p>
+  </section>
+
+  <section class="screen">
+    <div class="screen-label"><span class="num">02</span><h2>Desktop · states</h2><span class="note">Only the “Start in” block and the action row of the dialog are shown</span></div>
+    <div class="mica state-grid">
+      <div class="state"><h4>Loading a folder <span class="badge">skeleton after 150 ms</span></h4><div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb" title="project">project</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb" title="roosterm">roosterm</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="node_modules" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">node_modules</span></nav></div><label class="pk-filter"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter folders" disabled></label><div class="pk-list " aria-label="Folders"><div class="loading-note" role="status"><span class="spinner" aria-hidden="true"></span>Reading node_modules…</div><div class="sk"><i></i><i style="width:46%"></i></div><div class="sk"><i></i><i style="width:62%"></i></div><div class="sk"><i></i><i style="width:38%"></i></div><div class="sk"><i></i><i style="width:54%"></i></div><div class="sk"><i></i><i style="width:30%"></i></div></div></div><div class="starts "><svg class="ic sm"><use href="#i-folder_open"/></svg>Starts in <code><span dir="ltr">~/project/roosterm/node_modules</span></code></div><div class="row-actions"><button class="btn">Cancel</button><button class="btn primary" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;display:block">Open shell in node_modules</button></div><p class="cap">Breadcrumb updates at once; only the list waits. Open stays enabled — the folder exists, its children are not needed to start. Under 150 ms no skeleton is drawn, so fast folders never flicker.</p></div><div class="state"><h4>Empty folder</h4><div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb" title="project">project</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="scratchpad" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">scratchpad</span></nav></div><label class="pk-filter"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter folders" disabled></label><div class="pk-list " aria-label="Folders"><div class="pk-empty" role="status"><span class="big"><svg class="ic"><use href="#i-folder_open"/></svg></span><b>No folders inside scratchpad</b><span>It may still contain files. Start here, or go back up.</span><div class="btns"><button class="btn"><svg class="ic sm"><use href="#i-arrow_up"/></svg>Up to project</button></div></div></div></div><div class="starts "><svg class="ic sm"><use href="#i-folder_open"/></svg>Starts in <code><span dir="ltr">~/project/scratchpad</span></code></div><div class="row-actions"><button class="btn">Cancel</button><button class="btn primary" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;display:block">Open shell in scratchpad</button></div><p class="cap">A leaf folder is the usual last step, so the empty state points at the primary action instead of reading as an error. If it has dot folders, the “N hidden folders · Show” foot row still appears.</p></div><div class="state"><h4>Contents can’t be listed — still selectable <span class="badge">EACCES / EPERM</span></h4><div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb" title="Library">Library</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="Mail" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Mail</span></nav></div><label class="pk-filter"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter folders" disabled></label><div class="pk-list " aria-label="Folders"><div class="pk-empty err" role="alert"><span class="big"><svg class="ic"><use href="#i-lock_closed"/></svg></span><b>Can’t list the contents of Mail</b><span>Permission denied (EACCES) reading <span class="mono">~/Library/Mail</span> as <span class="mono">jhangyu</span>.</span><span class="warn-line">You can still start here. If the host can’t enter the folder either, the new session reports that error when it starts.</span><div class="btns"><button class="btn"><svg class="ic sm"><use href="#i-arrow_up"/></svg>Up to Library</button><button class="btn subtle"><svg class="ic sm"><use href="#i-arrow_clockwise"/></svg>Retry</button></div></div></div></div><div class="starts warn"><svg class="ic sm"><use href="#i-warning"/></svg>Starts in (contents unlisted) <code><span dir="ltr">~/Library/Mail</span></code></div><div class="row-actions"><button class="btn">Cancel</button><button class="btn primary" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;display:block">Open shell in Mail</button></div><p class="cap">The error names cause, path and user (nothing hidden) but does not block: Open stays enabled. Rows already known to be unreadable show a lock instead of the chevron and can still be entered to reach this screen.</p></div><div class="state"><h4>Deep nesting (7 levels) · long names · hidden folders shown <span class="badge">overflow menu open</span></h4><div class="picker" style="overflow:visible"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb more open" aria-expanded="true" aria-label="4 more folders"><svg class="ic"><use href="#i-more_horizontal"/></svg></button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb" title="customer-onboarding-service">customer-onboarding-service</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="integration-tests-with-very-long-descriptive-folder-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">integration-tests-with-very-long-descriptive-folder-name</span></nav><div class="menu" role="menu" aria-label="Collapsed folders"><button role="menuitem" style="padding-left:10px"><svg class="ic sm"><use href="#i-folder"/></svg><span>work</span></button><button role="menuitem" style="padding-left:22px"><svg class="ic sm"><use href="#i-folder"/></svg><span>acme-corporation-internal-platform</span></button><button role="menuitem" style="padding-left:34px"><svg class="ic sm"><use href="#i-folder"/></svg><span>services</span></button><button role="menuitem" style="padding-left:46px"><svg class="ic sm"><use href="#i-folder"/></svg><span>backend</span></button></div></div><label class="pk-filter"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter 5 folders"></label><ul class="pk-list " aria-label="Folders"><li><button class="row dotf" title=".pytest_cache"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">.pytest_cache</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="2026-11-fixtures-generated-from-production-snapshot-anonymised"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">2026-11-fixtures-generated-from-production-snapshot-anonymised</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="contracts"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">contracts</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="helpers"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">helpers</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li></ul><div class="pk-foot"><span>Showing 1 hidden folder</span><button class="btn subtle sm"><svg class="ic sm"><use href="#i-eye_off"/></svg>Hide</button></div></div><div class="starts "><svg class="ic sm"><use href="#i-folder_open"/></svg>Starts in <code><span dir="ltr">~/work/acme-corporation-internal-platform/services/backend/customer-onboarding-service/integration-tests-with-very-long-descriptive-folder-name</span></code></div><div class="row-actions"><button class="btn">Cancel</button><button class="btn primary" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;display:block">Open shell in integration-tests-with-very-long…</button></div><p class="cap">Breadcrumb rule: always <b>~</b>, the parent and the current folder; the ancestors between collapse into “…” as soon as the bar would overflow. Segments cap at 140 px (110 px phone); the current one takes the rest and ends in an ellipsis; full names in tooltips. “Starts in” truncates from the <b>left</b> so the folder name stays visible; the primary label truncates at its 320 px max.</p></div><div class="state"><h4>Many children (214) · filtering <span class="badge">virtualised</span></h4><div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="src" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">src</span></nav></div><label class="pk-filter active"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter folders" value="cl"><span class="count" aria-live="polite">5 of 214</span><button class="icon-btn" style="width:28px;height:28px" aria-label="Clear filter"><svg class="ic sm"><use href="#i-dismiss"/></svg></button></label><ul class="pk-list " aria-label="Folders"><li><button class="row hover" title="claude-hooks"><svg class="ic"><use href="#i-folder"/></svg><span class="nm"><mark>cl</mark>aude-hooks</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="cli-tools"><svg class="ic"><use href="#i-folder"/></svg><span class="nm"><mark>cl</mark>i-tools</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="client-api"><svg class="ic"><use href="#i-folder"/></svg><span class="nm"><mark>cl</mark>ient-api</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="cloud-infra"><svg class="ic"><use href="#i-folder"/></svg><span class="nm"><mark>cl</mark>oud-infra</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="openclaw-fork"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">open<mark>cl</mark>aw-fork</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li></ul><div class="pk-foot"><span>Enter opens <b style="color:var(--foreground)">claude-hooks</b></span><span><kbd>↑</kbd> <kbd>↓</kbd> move</span></div></div><div class="starts "><svg class="ic sm"><use href="#i-folder_open"/></svg>Starts in <code><span dir="ltr">~/src</span></code></div><div class="row-actions"><button class="btn">Cancel</button><button class="btn primary" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;display:block">Open shell in src</button></div><p class="cap">Unfiltered: virtualised, case-insensitive natural sort (<span class="mono">v2</span> before <span class="mono">v10</span>), count in the placeholder (“Filter 214 folders”). Matches anywhere in the name, prefix matches first; first match pre-focused so Enter goes in. The filter clears on every folder change. Ctrl+Enter still opens the session in <span class="mono">~/src</span> (the current folder, not the focused row).</p></div><div class="state"><h4>Filter finds nothing</h4><div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><span class="crumb cur home" aria-current="location" aria-label="Home folder">~</span></nav></div><label class="pk-filter active"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter folders" value="nvim"><span class="count" aria-live="polite">0 of 31</span><button class="icon-btn" style="width:28px;height:28px" aria-label="Clear filter"><svg class="ic sm"><use href="#i-dismiss"/></svg></button></label><div class="pk-list " aria-label="Folders"><div class="pk-empty" role="status"><span class="big"><svg class="ic"><use href="#i-search"/></svg></span><b>No folder named “nvim” here</b><span>1 hidden folder matches: <span class="mono">.config/nvim</span> is one level down.</span><div class="btns"><button class="btn"><svg class="ic sm"><use href="#i-eye"/></svg>Include hidden folders</button><button class="btn subtle"><svg class="ic sm"><use href="#i-dismiss"/></svg>Clear filter</button></div></div></div></div><div class="starts "><svg class="ic sm"><use href="#i-folder_open"/></svg>Starts in <code><span dir="ltr">~</span></code></div><div class="row-actions"><button class="btn">Cancel</button><button class="btn primary" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;display:block">Open shell in ~</button></div><p class="cap">No dead end: says what was searched, offers the hidden-folder match it skipped, and a one-tap clear. Matching covers the current folder only; the hint looks one level into dot folders because a missing name is usually there (<span class="mono">~/.config/*</span>).</p></div><div class="state"><h4>Remembered folder no longer exists</h4><div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="project" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">project</span></nav></div><label class="pk-filter"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter 12 folders"></label><ul class="pk-list " aria-label="Folders"><div class="notice" role="status"><svg class="ic sm"><use href="#i-warning"/></svg><span><span class="mono">~/project/old-api</span> was moved or deleted. Opened its nearest parent instead.</span></div><li><button class="row " title="client-api"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">client-api</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="dotnet-sample"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">dotnet-sample</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="roosterm"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">roosterm</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li></ul></div><div class="starts "><svg class="ic sm"><use href="#i-folder_open"/></svg>Starts in <code><span dir="ltr">~/project</span></code></div><div class="row-actions"><button class="btn">Cancel</button><button class="btn primary" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;display:block">Open shell in project</button></div><p class="cap">Checked when the dialog opens: the remembered path is walked up to the nearest existing ancestor and the picker says so. It never lands somewhere else silently. The dead entry is dropped from Recent.</p></div><div class="state"><h4>Folder vanished while browsing <span class="badge">ENOENT</span></h4><div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb" title="project">project</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="old-api" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">old-api</span></nav></div><label class="pk-filter"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter folders" disabled></label><div class="pk-list " aria-label="Folders"><div class="pk-empty err" role="alert"><span class="big"><svg class="ic"><use href="#i-error_circle"/></svg></span><b>old-api no longer exists</b><span>It was moved or deleted after the parent was listed.</span><div class="btns"><button class="btn"><svg class="ic sm"><use href="#i-arrow_up"/></svg>Up to project</button></div></div></div></div><div class="starts bad"><svg class="ic sm"><use href="#i-error_circle"/></svg>Can’t start in <code><span dir="ltr">~/project/old-api</span></code></div><div class="row-actions"><button class="btn">Cancel</button><button class="btn primary" disabled style="max-width:320px;overflow:hidden;text-overflow:ellipsis;display:block">Open shell in old-api</button></div><p class="cap">The only state that disables Open: a session cannot start in a folder that is gone. “Up” goes to the nearest parent that still exists.</p></div><div class="state"><h4>Swarm selected</h4><div class="choices three" style="margin-bottom:16px" role="radiogroup" aria-label="Session type"><button class="choice v" role="radio" aria-checked="false"><span class="glyph"><svg class="ic"><use href="#i-window_console"/></svg></span><span class="radio"></span><span><b>Shell</b><small>Login shell in the folder below</small></span></button><button class="choice v" role="radio" aria-checked="false"><span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span><span class="radio"></span><span><b>Claude Code</b><small>Runs claude in the folder below</small></span></button><button class="choice v selected" role="radio" aria-checked="true"><span class="glyph"><svg class="ic"><use href="#i-people_team"/></svg></span><span class="radio on"></span><span><b>Swarm</b><small>Attach to a running swarm socket</small></span></button></div><div class="sec-label"><b>Available swarm sockets</b><small>2 found</small></div><div class="hidden-sessions" style="margin-bottom:16px"><div class="hs-row" style="padding:12px 16px"><span><b class="mono" style="font-size:13px">claude-swarm-48213</b></span></div><div class="hs-row" style="padding:12px 16px;border-top:1px solid var(--grey-94)"><span><b class="mono" style="font-size:13px">claude-swarm-51877</b></span></div></div><div class="row-actions"><button class="btn">Cancel</button><button class="btn primary" style="max-width:320px;overflow:hidden;text-overflow:ellipsis;display:block">Open swarm</button></div><p class="cap">Swarm attaches to an existing tmux socket whose panes already have their own folders, so <b>Start in</b>, Recent and the picker are hidden and the socket list (unchanged from mockup 3) shows instead. Switching back to Shell or Claude Code restores the picker where it was.</p></div><div class="state"><h4>Primary label by session type</h4><table class="spec"><thead><tr><th>Type</th><th>Primary button</th><th>Disabled when</th></tr></thead><tbody><tr><td>Shell</td><td>Open shell in &lt;folder&gt;</td><td>folder vanished</td></tr><tr><td>Claude Code</td><td>Open Claude Code in &lt;folder&gt;</td><td>folder vanished</td></tr><tr><td>Swarm</td><td>Open swarm</td><td>no socket selected</td></tr></tbody></table><p class="cap">&lt;folder&gt; is the current breadcrumb folder (<span class="mono">~</span> at home). The label truncates at 320 px desktop; on phone it fills the action bar and truncates there.</p></div>
+    </div>
+  </section>
+
+  <section class="screen">
+    <div class="screen-label"><span class="num">03</span><h2>Phone · 390 px · bottom sheet</h2><span class="note">48 px segmented session type · rows 48 px · crumbs 44 px · sticky actions · soft keyboard</span></div>
+    <div class="phone-row">
+      <div class="phone-col"><div class="phone"><div class="phone-screen"><div class="statusbar"><span>9:41</span><span class="cam"></span><span>5G</span></div><div class="p-ghost"><div class="t"></div><div class="c"></div></div><div class="scrim"></div><div class="sheet"><div class="grab"></div><div class="sheet-head"><h3>New session</h3><button class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-dismiss"/></svg></button></div><div class="sheet-body"><div class="segm" role="radiogroup" aria-label="Session type"><button role="radio" aria-checked="false">Shell</button><button role="radio" aria-checked="true"><svg class="ic sm"><use href="#i-checkmark"/></svg>Claude Code</button><button role="radio" aria-checked="false">Swarm</button></div><div class="recent" aria-label="Recent folders"><span class="lbl"><svg class="ic sm"><use href="#i-history"/></svg>Recent</span><button class="chip on" title="~/project/roosterm" style="height:36px">roosterm</button><button class="chip" title="~/project/client-api" style="height:36px">client-api</button><button class="chip" title="~/dotfiles" style="height:36px">dotfiles</button><button class="chip" title="~/work/acme/web" style="height:36px">web <small>acme</small></button></div><div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb" title="project">project</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="roosterm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">roosterm</span></nav></div><label class="pk-filter"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter 9 folders"></label><ul class="pk-list " aria-label="Folders"><li><button class="row " title="app"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">app</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="build"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">build</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="docs"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">docs</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row press" title="host"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">host</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="scripts"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">scripts</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="shared-assets"><svg class="ic"><use href="#i-folder_link"/></svg><span class="nm">shared-assets</span><span class="tag">link</span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="web"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">web</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li></ul><div class="pk-foot"><span>3 hidden folders</span><button class="btn subtle"><svg class="ic sm"><use href="#i-eye"/></svg>Show</button></div></div><div class="starts "><svg class="ic sm"><use href="#i-folder_open"/></svg>Starts in <code><span dir="ltr">~/project/roosterm</span></code></div></div><div class="sheet-actions"><button class="btn">Cancel</button><button class="btn primary" style="min-width:0;overflow:hidden;text-overflow:ellipsis;display:block">Open Claude Code in roosterm</button></div></div></div></div><p class="cap"><b>Default.</b> Full-height bottom sheet (top corners 28). Session type is one 48 px segmented row; the picker gets ~7 rows of 48 px. Recent chips scroll sideways. Hidden sessions sit below “Starts in” and scroll with the sheet body (not shown). Android Back and Esc close the sheet; going up is only the breadcrumb.</p></div><div class="phone-col"><div class="phone"><div class="phone-screen"><div class="statusbar"><span>9:41</span><span class="cam"></span><span>5G</span></div><div class="p-ghost"><div class="t"></div><div class="c"></div></div><div class="scrim"></div><div class="sheet kb"><div class="grab"></div><div class="sheet-head"><h3>New session</h3><button class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-dismiss"/></svg></button></div><div class="sheet-body"><div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="src" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">src</span></nav></div><label class="pk-filter active"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter folders" value="cl"><span class="count" aria-live="polite">5 of 214</span><button class="icon-btn" style="width:44px;height:44px" aria-label="Clear filter"><svg class="ic sm"><use href="#i-dismiss"/></svg></button></label><ul class="pk-list " aria-label="Folders"><li><button class="row " title="claude-hooks"><svg class="ic"><use href="#i-folder"/></svg><span class="nm"><mark>cl</mark>aude-hooks</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="cli-tools"><svg class="ic"><use href="#i-folder"/></svg><span class="nm"><mark>cl</mark>i-tools</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="client-api"><svg class="ic"><use href="#i-folder"/></svg><span class="nm"><mark>cl</mark>ient-api</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="cloud-infra"><svg class="ic"><use href="#i-folder"/></svg><span class="nm"><mark>cl</mark>oud-infra</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li></ul></div></div><div class="sheet-actions"><button class="btn">Cancel</button><button class="btn primary" style="min-width:0;overflow:hidden;text-overflow:ellipsis;display:block">Open Claude Code in src</button></div></div><div class="ime"><div class="k">Gboard</div><div class="ime-row"><span>q</span><span>w</span><span>e</span><span>r</span><span>t</span><span>y</span><span>u</span><span>i</span><span>o</span><span>p</span></div><div class="ime-row"><span>a</span><span>s</span><span>d</span><span>f</span><span>g</span><span>h</span><span>j</span><span>k</span><span>l</span></div><div class="ime-row"><span class="w">⇧</span><span>z</span><span>x</span><span>c</span><span>v</span><span>b</span><span>n</span><span>m</span><span class="w">⌫</span></div><div class="ime-row"><span class="w">?123</span><span class="w">.</span><span class="space"></span><span class="w">Go</span></div></div></div></div><p class="cap"><b>Soft keyboard open</b> (214 children, filter “cl”). The sheet sizes to the visual viewport; session type and Recent scroll out of view while the filter has focus, so breadcrumb, filter, 4 rows and the action bar stay above the keyboard. Keyboard “Go” enters the first match.</p></div><div class="phone-col"><div class="phone"><div class="phone-screen"><div class="statusbar"><span>9:41</span><span class="cam"></span><span>5G</span></div><div class="p-ghost"><div class="t"></div><div class="c"></div></div><div class="scrim"></div><div class="sheet"><div class="grab"></div><div class="sheet-head"><h3>New session</h3><button class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-dismiss"/></svg></button></div><div class="sheet-body"><div class="segm" role="radiogroup" aria-label="Session type"><button role="radio" aria-checked="false">Shell</button><button role="radio" aria-checked="true"><svg class="ic sm"><use href="#i-checkmark"/></svg>Claude Code</button><button role="radio" aria-checked="false">Swarm</button></div><div class="picker" style="overflow:visible"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb more open" aria-expanded="true" aria-label="5 more folders"><svg class="ic"><use href="#i-more_horizontal"/></svg></button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="integration-tests-with-very-long-descriptive-folder-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">integration-tests-with-very-long-descriptive-folder-name</span></nav><div class="menu" role="menu" aria-label="Collapsed folders"><button role="menuitem" style="padding-left:10px"><svg class="ic sm"><use href="#i-folder"/></svg><span>work</span></button><button role="menuitem" style="padding-left:22px"><svg class="ic sm"><use href="#i-folder"/></svg><span>acme-corporation-internal-platform</span></button><button role="menuitem" style="padding-left:34px"><svg class="ic sm"><use href="#i-folder"/></svg><span>services</span></button><button role="menuitem" style="padding-left:46px"><svg class="ic sm"><use href="#i-folder"/></svg><span>backend</span></button><button role="menuitem" style="padding-left:58px"><svg class="ic sm"><use href="#i-folder"/></svg><span>customer-onboarding-service</span></button></div></div><label class="pk-filter"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter 3 folders"></label><ul class="pk-list " aria-label="Folders"><li><button class="row " title="2026-11-fixtures-generated-from-production-snapshot-anonymised"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">2026-11-fixtures-generated-from-production-snapshot-anonymised</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="contracts"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">contracts</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li><li><button class="row " title="helpers"><svg class="ic"><use href="#i-folder"/></svg><span class="nm">helpers</span><span class="tag"></span><svg class="ic sm go"><use href="#i-chevron_right"/></svg></button></li></ul></div><div class="starts "><svg class="ic sm"><use href="#i-folder_open"/></svg>Starts in <code><span dir="ltr">~/work/acme-corporation-internal-platform/services/backend/customer-onboarding-service/integration-tests-with-very-long-descriptive-folder-name</span></code></div></div><div class="sheet-actions"><button class="btn">Cancel</button><button class="btn primary" style="min-width:0;overflow:hidden;text-overflow:ellipsis;display:block">Open Claude Code in integration-tests-with…</button></div></div></div></div><p class="cap"><b>Deep nesting, overflow menu open.</b> On phone the bar keeps only <span class="mono">~</span>, “…” and the current folder; the menu spans the bar with 48 px items, indented by depth. Row names wrap to two lines (no hover tooltips on touch).</p></div><div class="phone-col"><div class="phone"><div class="phone-screen"><div class="statusbar"><span>9:41</span><span class="cam"></span><span>5G</span></div><div class="p-ghost"><div class="t"></div><div class="c"></div></div><div class="scrim"></div><div class="sheet"><div class="grab"></div><div class="sheet-head"><h3>New session</h3><button class="icon-btn" aria-label="Close"><svg class="ic"><use href="#i-dismiss"/></svg></button></div><div class="sheet-body"><div class="segm" role="radiogroup" aria-label="Session type"><button role="radio" aria-checked="true"><svg class="ic sm"><use href="#i-checkmark"/></svg>Shell</button><button role="radio" aria-checked="false">Claude Code</button><button role="radio" aria-checked="false">Swarm</button></div><div class="picker"><div class="pk-bar"><nav class="crumbs" aria-label="Folder path"><button class="crumb home" aria-label="Home folder">~</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><button class="crumb" title="Library">Library</button><span class="sep"><svg class="ic"><use href="#i-chevron_right"/></svg></span><span class="crumb cur" aria-current="location" title="Mail" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Mail</span></nav></div><label class="pk-filter"><svg class="ic sm"><use href="#i-search"/></svg><input type="search" aria-label="Filter folders" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="Filter folders" disabled></label><div class="pk-list " aria-label="Folders"><div class="pk-empty err" role="alert"><span class="big"><svg class="ic"><use href="#i-lock_closed"/></svg></span><b>Can’t list the contents of Mail</b><span>Permission denied (EACCES) reading <span class="mono">~/Library/Mail</span>.</span><span class="warn-line">You can still start here.</span><div class="btns"><button class="btn lg"><svg class="ic sm"><use href="#i-arrow_up"/></svg>Up</button><button class="btn subtle lg"><svg class="ic sm"><use href="#i-arrow_clockwise"/></svg>Retry</button></div></div></div></div><div class="starts warn"><svg class="ic sm"><use href="#i-warning"/></svg>Starts in (contents unlisted) <code><span dir="ltr">~/Library/Mail</span></code></div></div><div class="sheet-actions"><button class="btn">Cancel</button><button class="btn primary" style="min-width:0;overflow:hidden;text-overflow:ellipsis;display:block">Open shell in Mail</button></div></div></div></div><p class="cap"><b>Contents can’t be listed.</b> Same copy as desktop, recovery buttons 44 px, Open stays enabled. Loading, empty, no-match, vanished and remembered-path states use the desktop markup with touch sizes.</p></div>
+    </div>
+  </section>
+
+  <section class="screen">
+    <div class="screen-label"><span class="num">04</span><h2>Resulting tab labels · <span class="mono" style="font-size:16px">&lt;folder&gt; · &lt;summary&gt;</span></h2><span class="note">Desktop rail cards + main head · phone chips</span></div>
+    <div class="mica tabs-stage">
+      <nav class="rail-mini" aria-label="Sessions">
+        <div class="hd">Sessions · 6</div>
+        <div class="session active"><span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span><span style="min-width:0"><span class="lbl2"><span class="f" title="roosterm">roosterm</span><span class="s">Add folder picker to the New session dialog and remember last path</span></span><span class="meta" style="direction:rtl;text-align:left"><span dir="ltr">~/project/roosterm</span></span><span class="badge run" style="margin-top:8px"><span class="dot live"></span>Running</span></span></div>
+        <div class="session"><span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span><span style="min-width:0"><span class="lbl2"><span class="f" title="roosterm">roosterm</span></span><span class="meta" style="direction:rtl;text-align:left"><span dir="ltr">~/project/roosterm</span></span></span></div>
+        <div class="session"><span class="glyph"><svg class="ic"><use href="#i-window_console"/></svg></span><span style="min-width:0"><span class="lbl2"><span class="f" title="client-api">client-api</span></span><span class="meta" style="direction:rtl;text-align:left"><span dir="ltr">~/project/client-api</span></span></span></div>
+        <div class="session"><span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span><span style="min-width:0"><span class="lbl2"><span class="f" title="integration-tests-with-very-long-descriptive-folder-name">integration-tests-with-very-long-descriptive-folder-name</span><span class="s">Seed fixtures</span></span><span class="meta" style="direction:rtl;text-align:left"><span dir="ltr">~/work/acme-corporation-internal-platform/services/backend/customer-onboarding-service/integration-tests-with-very-long-descriptive-folder-name</span></span></span></div>
+        <div class="session"><span class="glyph"><svg class="ic"><use href="#i-bot"/></svg></span><span style="min-width:0"><span class="lbl2"><span class="f" style="max-width:none" title="My release prep">My release prep</span></span><span class="meta" style="direction:rtl;text-align:left"><span dir="ltr">~/project/roosterm</span></span></span></div>
+        <div class="session"><span class="glyph"><svg class="ic"><use href="#i-people_team"/></svg></span><span style="min-width:0"><span class="lbl2"><span class="f" title="claude-swarm-48213">claude-swarm-48213</span></span><span class="meta" style="direction:rtl;text-align:left"><span dir="ltr">swarm socket</span></span></span></div>
+      </nav>
+      <div class="main-mini">
+        <div class="head-mini"><span class="lbl2"><span class="f" title="roosterm">roosterm</span><span class="s">Add folder picker to the New session dialog and remember last path</span></span><span class="badge run"><span class="dot live"></span>Running</span><span class="path">~/project/roosterm</span></div>
+        <div class="p-tabs" style="max-width:390px">
+          <span class="chip on"><span class="dot live"></span><span class="lbl2"><span class="f" title="roosterm">roosterm</span><span class="s">Add folder picker to the dialog</span></span></span>
+          <span class="chip"><span class="lbl2"><span class="f" title="roosterm">roosterm</span></span></span>
+          <span class="chip"><span class="lbl2"><span class="f" title="client-api">client-api</span></span></span>
+        </div>
+        <div class="rules">
+          <div class="rule"><span class="lbl2"><span class="f" title="roosterm">roosterm</span></span><small><b>Claude Code, before a summary exists:</b> folder name alone — no placeholder, so the label never jumps from fake to real. Two such tabs in one folder both read “roosterm”; accepted.</small></div>
+          <div class="rule"><span class="lbl2"><span class="f" title="roosterm">roosterm</span><span class="s">Fix WebSocket reconnect</span></span><small><b>Summary arrives or changes:</b> appended after “ · ” and replaced in place as Claude Code reports it (150 ms cross-fade on the summary part only).</small></div>
+          <div class="rule"><span class="lbl2" style="max-width:260px"><span class="f" title="roosterm">roosterm</span><span class="s">Add folder picker to the New session dialog and remember last path</span></span><small><b>Long summary:</b> the summary truncates first; the folder part stays whole. Full label in the tooltip and in the wider main head.</small></div>
+          <div class="rule"><span class="lbl2" style="max-width:260px"><span class="f" title="integration-tests-with-very-long-descriptive-folder-name">integration-tests-with-very-long-descriptive-folder-name</span><span class="s">Seed fixtures</span></span><small><b>Long folder name:</b> capped at 20 ch (12 ch in phone chips) so a summary still shows; the path line under it truncates from the left.</small></div>
+          <div class="rule"><span class="lbl2"><span class="f" title="client-api">client-api</span></span><small><b>Shell tabs:</b> folder name only — a shell has no Claude Code summary to append.</small></div>
+          <div class="rule"><span class="lbl2"><span class="f" style="max-width:none" title="My release prep">My release prep</span></span><small><b>Renamed by the user:</b> the custom label is kept as typed and the summary is no longer appended. Swarm tabs keep their socket name.</small></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen">
+    <div class="screen-label"><span class="num">05</span><h2>Implementation spec</h2><span class="note">Sizes and spacing · states · navigation · component states. Values in px; tokens in this file’s :root</span></div>
+    <div class="mica spec-stage">
+      <div class="spec-card"><h3>Sizes and spacing</h3><table class="spec"><thead><tr><th>Element</th><th>Desktop (pointer)</th><th>Phone (touch, ≤ 767 px)</th><th>Token / M3 radius</th></tr></thead><tbody><tr><td>Dialog / sheet</td><td>560 px wide, padding 28 · 28 · 24, max-height 100dvh − 32 (picker list scrolls inside)</td><td>full width, top edge 48 px below screen top, body padding 8 16 0</td><td>corner-extra-large 28 (sheet: top corners only)</td></tr><tr><td>Title → lead → session type</td><td>6 px · 22 px</td><td>title only; 8 px to the segmented row</td><td>—</td></tr><tr><td>Session type</td><td>3 tiles in 1 row, gap 12, padding 14 (13 when selected, 2 px border); 22 px below</td><td>segmented row 48 px, 3 equal segments, 1 px dividers, check icon on the selected one; 14 px below</td><td>tiles corner-medium 12 · segmented corner-full</td></tr><tr><td>“Start in” label → Recent</td><td>8 px · then 10 px to the picker</td><td>label hidden; Recent row then 10 px</td><td>—</td></tr><tr><td>Recent chips</td><td>height 32, padding 0 12, gap 8, max 5, horizontal scroll</td><td>height 36, gap 8</td><td>corner-full</td></tr><tr><td>Breadcrumb bar</td><td>min-height 44, padding 4; crumb 36 tall, padding 0 8, max 140; separator 12 px icon</td><td>min-height 52; crumb 44 tall, padding 0 10, max 110</td><td><code>--picker-crumb-*</code> · corner-small 8</td></tr><tr><td>Current-folder indicator</td><td>3 px brand bar, 8 px inset each side, 2 px above the bottom</td><td>same</td><td>corner-full</td></tr><tr><td>Filter row</td><td>height 40, padding 0 12, icon gap 8</td><td>height 48; clear button 44 × 44</td><td><code>--picker-filter-h*</code></td></tr><tr><td>Folder rows</td><td>height 40, padding 0 10 0 12, columns 20 · 1fr · auto · 16, gap 12; list padding 4; list viewport 240 (6 rows)</td><td>height 48, names clamp to 2 lines; list fills the remaining sheet height</td><td><code>--picker-row-h*</code> · corner-small 8</td></tr><tr><td>Hidden-folder foot row</td><td>padding 6 6 6 14; “Show” 28 tall</td><td>“Show” 44 tall</td><td>—</td></tr><tr><td>Overflow menu</td><td>min-width 220, items 36 tall, indent 12 px per depth</td><td>spans the bar (4 px insets), items 48 tall</td><td>corner-extra-small 4 (M3 menu)</td></tr><tr><td>“Starts in” line</td><td>10 px below the picker, 22 px above hidden sessions; caption 12/16; path mono, truncates from the left</td><td>8 px below the picker</td><td>—</td></tr><tr><td>Actions</td><td>Cancel + primary, gap 8, 36 tall, right-aligned; keyboard hints on the left</td><td>sticky bar: padding 12 16 max(24, safe-area), buttons 48 tall, primary fills the rest</td><td>corner-small 8</td></tr></tbody></table></div>
+      <div class="spec-card"><h3>Picker states</h3><table class="spec"><thead><tr><th>State</th><th>When</th><th>List area shows</th><th>Open</th></tr></thead><tbody><tr><td>Ready</td><td>listing returned</td><td>rows, then the hidden-folder foot row if any dot folders</td><td class="ok">enabled</td></tr><tr><td>Loading</td><td>listing pending > 150 ms (nothing drawn before)</td><td>status line + skeleton rows; filter disabled</td><td class="ok">enabled</td></tr><tr><td>Empty</td><td>0 visible subfolders</td><td>“No folders inside X” + Up</td><td class="ok">enabled</td></tr><tr><td>Filtered</td><td>filter not empty, ≥ 1 match</td><td>matches highlighted, “n of N”, first match focused</td><td class="ok">enabled (current folder)</td></tr><tr><td>No match</td><td>filter not empty, 0 matches</td><td>message + hidden-folder hint + Clear</td><td class="ok">enabled</td></tr><tr><td>Can’t list</td><td>EACCES / EPERM on listing</td><td>lock panel with cause, path, user + Up, Retry; “Starts in” in warning colour</td><td class="ok">enabled</td></tr><tr><td>Other listing error</td><td>any other failure</td><td>host error text verbatim + Retry</td><td class="ok">enabled</td></tr><tr><td>Folder vanished</td><td>ENOENT while browsing</td><td>“X no longer exists” + Up to the nearest existing parent</td><td class="no">disabled</td></tr><tr><td>Remembered path gone</td><td>dialog opens, saved path missing</td><td>nearest existing parent + warning notice above the rows</td><td class="ok">enabled</td></tr><tr><td>Link outside ~</td><td>symlink target not under ~</td><td>row disabled, “links outside ~”, reason in tooltip</td><td>— (cannot be entered)</td></tr></tbody></table></div>
+      <div class="spec-card"><h3>Navigation and input</h3><table class="spec"><thead><tr><th>Input</th><th>Effect</th></tr></thead><tbody><tr><td>Tap / click a row</td><td>enter that folder (list slides 24 px in from the right, 200 ms decelerate)</td></tr><tr><td>Tap a crumb</td><td>jump up to it (list slides in from the left)</td></tr><tr><td>Tap “…”</td><td>menu of the collapsed ancestors; choosing one jumps there</td></tr><tr><td>Tap a Recent chip</td><td>jump the picker to that folder (highlighted chip = current folder)</td></tr><tr><td>Primary button</td><td>create the session in the current breadcrumb folder; the folder and the hidden-folder toggle are remembered</td></tr><tr><td>Esc, Android Back, ×</td><td>close the dialog without creating anything</td></tr><tr><td>Keyboard (desktop)</td><td>typing focuses the filter; ↑ ↓ move; Enter or → enter; Backspace or ← up; Ctrl+Enter = primary</td></tr><tr><td>First ever open</td><td>starts at ~; no Recent row</td></tr><tr><td>Reduced motion</td><td>all slides and fades become instant</td></tr></tbody></table></div>
+      <div class="spec-card"><h3>Component states</h3><table class="spec"><thead><tr><th>Part</th><th>Hover</th><th>Pressed</th><th>Focus</th><th>Disabled</th><th>Current / selected</th></tr></thead><tbody><tr><td>Folder row</td><td>grey-96</td><td>grey-92</td><td>2 px grey-14 ring + white inset</td><td>grey-74 text, no chevron, reason tooltip</td><td>—</td></tr><tr><td>Crumb</td><td>overlay 5 %</td><td>overlay 8 %</td><td>same ring</td><td>—</td><td>600 weight + 3 px brand bar</td></tr><tr><td>Recent chip</td><td>grey-96</td><td>grey-92</td><td>same ring</td><td>removed, never disabled</td><td>brand-160 fill, brand-60 text</td></tr><tr><td>Session tile (desktop)</td><td>border grey-74</td><td>—</td><td>same ring</td><td>—</td><td>2 px brand border, brand-160 fill</td></tr><tr><td>Segmented (phone)</td><td>—</td><td>grey-92</td><td>same ring</td><td>—</td><td>brand-160 fill, brand-60 text, check icon</td></tr><tr><td>Filter</td><td>—</td><td>—</td><td>2 px brand underline</td><td>while loading / can’t list / vanished</td><td>count “n of N” live region</td></tr><tr><td>Primary button</td><td>brand-70</td><td>brand-60</td><td>same ring</td><td>grey-94 fill, grey-74 text</td><td>—</td></tr></tbody></table><p class="cap">All colour changes 150 ms (Fluent easy-ease). Folder changes 200 ms decelerate, 24 px slide in the direction of travel. <span class="mono">prefers-reduced-motion</span> makes every change instant.</p></div>
+    </div>
+  </section>
+
+  <p class="cap" style="text-align:center;margin-top:40px">Icons: Fluent 2 regular-20 (~/ui-kits/icons/fluent2/regular-20), inlined. Tokens: mockup 3 / web/src/styles/tokens.css. No external requests.</p>
+</main>
+</body>
+</html>

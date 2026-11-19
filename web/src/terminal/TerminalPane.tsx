@@ -24,9 +24,10 @@ export type TerminalPaneProps = {
   onClose: (tabId: string) => void
   onSocketLost: () => void
   onRestart?: () => void
+  onTitle: (tabId: string, title: string) => void
 }
 
-export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }: TerminalPaneProps) {
+export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, onTitle }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const socketRef = useRef<TabSocket | null>(null)
@@ -40,9 +41,9 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
   // Socket callbacks and the resume listener outlive renders; they read the latest state/props via refs.
   const stateRef = useRef<PaneState>(initial)
   const ctrlRef = useRef(false)
-  const propsRef = useRef({ onExited, onSocketLost })
+  const propsRef = useRef({ onExited, onSocketLost, onTitle })
   useLayoutEffect(() => {
-    propsRef.current = { onExited, onSocketLost }
+    propsRef.current = { onExited, onSocketLost, onTitle }
   })
 
   const setCtrl = (latched: boolean) => {
@@ -161,6 +162,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
       syncSize()
       if (stateRef.current.kind === "live") socketRef.current?.sendResize(cols, rows)
     })
+    const title = term.onTitleChange((t) => propsRef.current.onTitle(tab.id, t))
     const stopTouch = attachTouchScroll(term, host)
     const observer = new ResizeObserver(() => fit.fit())
     observer.observe(host)
@@ -174,6 +176,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart }
       observer.disconnect()
       data.dispose()
       resize.dispose()
+      title.dispose()
       written.dispose()
       desktop.removeEventListener("change", applyMetrics)
       socketRef.current?.close()

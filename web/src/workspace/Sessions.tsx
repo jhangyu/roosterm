@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { endLabel } from "@/terminal/pane-state"
+import { tabParts, tabText } from "./tabs"
 import { BADGE, BADGE_IDLE, BADGE_RUN, ICON_BTN } from "./classes"
 import { isSwarm } from "./NewSessionDialog"
 
@@ -39,6 +40,17 @@ export type SessionsProps = {
   onSelect: (id: string) => void
   onNew: () => void
   onHide: (tab: Tab) => void
+}
+
+// "<folder> · <summary>": the folder keeps its name (capped), the summary truncates first (mockup 4b).
+function TabLabel({ tab, folderMax = "max-w-[20ch]" }: { tab: Tab; folderMax?: string }) {
+  const { folder, summary } = tabParts(tab)
+  return (
+    <span className="flex min-w-0" title={tabText(tab)}>
+      <span className={cn("shrink-0 truncate", folderMax)}>{folder}</span>
+      {summary !== "" && <span className="min-w-0 truncate font-normal whitespace-pre">{` · ${summary}`}</span>}
+    </span>
+  )
 }
 
 const HIDE_LABEL = "Hide tab (session keeps running)"
@@ -97,7 +109,7 @@ export function SessionRail({ tabs, activeId, onSelect, onNew, onHide, onLogout 
                     {isSwarm(tab) ? <PeopleTeamIcon /> : <WindowConsoleIcon />}
                   </span>
                   <span className="min-w-0 pr-6">
-                    <span className={cn("block truncate font-semibold", exited && "text-grey-38")}>{tab.label}</span>
+                    <span className={cn("block font-semibold", exited && "text-grey-38")}><TabLabel tab={tab} /></span>
                     <span className="mt-0.5 block truncate font-mono text-caption text-muted-foreground">{tab.id}</span>
                     <SessionBadge tab={tab} className="mt-2" />
                   </span>
@@ -153,7 +165,7 @@ type ActiveActions = { onRename: (tab: Tab) => void; onClose: (tab: Tab) => void
 export function MainHead({ active, onRename, onClose }: { active: Tab } & ActiveActions) {
   return (
     <div className="hidden items-center gap-3.5 px-1 pb-[18px] md:flex">
-      <h2 className="truncate text-subtitle1 font-semibold">{active.label}</h2>
+      <h2 className="min-w-0 text-subtitle1 font-semibold" title={tabText(active)}><TabLabel tab={active} /></h2>
       <SessionBadge tab={active} />
       <span className="truncate font-mono text-caption leading-5 text-muted-foreground">{active.id}</span>
       <span className="flex-1" />
@@ -184,7 +196,7 @@ export function PhoneBar({
     <div className="relative z-10 md:hidden">
       <div className="flex items-center gap-1 pt-1.5 pr-3 pb-2 pl-4">
         <div className="min-w-0 flex-1">
-          <b className="block truncate text-subtitle2 font-semibold">{active?.label ?? "Roosterm"}</b>
+          <b className="block text-subtitle2 font-semibold">{active ? <TabLabel tab={active} /> : "Roosterm"}</b>
           {/* inline caption on a body line box, as the mockup's `.title small` (line 21px) */}
           <div className="truncate">
             <small className="font-mono text-caption leading-5 text-muted-foreground">{active?.id ?? window.location.hostname}</small>
@@ -223,7 +235,7 @@ export function PhoneBar({
                 className="h-8 gap-1.5 rounded-full border-0 bg-transparent pr-1 pl-3 text-[13px] font-semibold text-inherit hover:bg-transparent"
               >
                 {on && tab.end === null && <Dot live className="text-success" />}
-                {tab.label}
+                <TabLabel tab={tab} folderMax="max-w-[12ch]" />
               </Button>
               <Button
                 variant="ghost"

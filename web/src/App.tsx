@@ -11,7 +11,7 @@ import { ErrorAlert } from "@/workspace/ErrorAlert"
 import { NewSessionDialog, restartRequest, type CreateRequest } from "@/workspace/NewSessionDialog"
 import { CloseConfirm, RenameDialog } from "@/workspace/SessionDialogs"
 import { MainHead, PhoneBar, SessionRail } from "@/workspace/Sessions"
-import { applyListing, hideTab, removeTab, showTab, type Workspace } from "@/workspace/tabs"
+import { applyListing, hideTab, removeTab, showTab, withTitle, type Workspace } from "@/workspace/tabs"
 
 type Auth = "checking" | "anonymous" | "signed-in"
 
@@ -119,7 +119,9 @@ export default function App() {
   // Exited-panel Restart: open a session of the same kind and label, switch to it, then remove the exited one.
   const restart = (old: Tab) =>
     void run(async () => {
-      const tab = await createTab(restartRequest(old))
+      const created = await createTab(restartRequest(old))
+      // Create cannot set `renamed`; re-applying the label does, so the title is not appended to a custom label.
+      const tab = old.renamed ? await renameTab(created.id, old.label) : created
       setWs((ws) => showTab(ws, tab))
       await closeById(old.id)
     })
@@ -185,7 +187,7 @@ export default function App() {
         {error !== null && <ErrorAlert error={error} onDismiss={() => setError(null)} className="mx-2.5 mb-3.5 w-auto md:mx-0" />}
         <div className="flex min-h-0 flex-1 flex-col px-2.5 md:px-0">
           {active !== null ? (
-            <TerminalPane key={active.id} tab={active} onExited={markExited} onClose={close} onSocketLost={socketLost} onRestart={() => restart(active)} />
+            <TerminalPane key={active.id} tab={active} onExited={markExited} onClose={close} onSocketLost={socketLost} onRestart={() => restart(active)} onTitle={(id, title) => setWs((ws) => withTitle(ws, id, title))} />
           ) : (
             // Not in mockup 3: empty state in the focused-card position.
             <div className="mb-2.5 grid flex-1 place-items-center rounded-lg bg-card shadow-8 md:mb-0">

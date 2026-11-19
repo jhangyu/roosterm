@@ -245,6 +245,7 @@ func TestListTabsOnlyRoostermInOrder(t *testing.T) {
 	e.fake.Seed(tabTerm("x3", 30, "c"))
 	titled := tabTerm("x2", 20, "b")
 	titled.Title, titled.Cwd = "Fix the login bug", filepath.Join(e.home, "proj")
+	titled.Argv = []string{"/usr/local/bin/claude", "--resume"}
 	e.fake.Seed(titled)
 	done := tabTerm("x4", 40, "d")
 	reason, code := "exited", 0
@@ -258,7 +259,7 @@ func TestListTabsOnlyRoostermInOrder(t *testing.T) {
 	if !slices.Equal(ids, []string{"x2", "x3", "x4"}) {
 		t.Fatalf("ids: expected [x2 x3 x4], got %v", ids)
 	}
-	if tabs[0].Title != "Fix the login bug" || tabs[0].Cwd != "proj" {
+	if tabs[0].Title != "Fix the login bug" || tabs[0].Cwd != "proj" || tabs[0].Program != "claude" || tabs[1].Program != "" {
 		t.Fatalf("titled tab: expected title and cwd proj, got %+v", tabs[0])
 	}
 	last := tabs[2]

@@ -36,15 +36,24 @@ async function call(op: string, method: string, path: string, body?: unknown, ta
 }
 
 const TAB_SHAPE =
-  "{id: string, label: string, exited: boolean, exitCode: int|null, signal: int|null, reason: string (when exited), hidden: boolean}"
+  "{id: string, label: string, exited: boolean, exitCode: int|null, signal: int|null, reason: string (when exited), hidden: boolean, title: string, program: string, renamed: boolean, cwd: string}"
 
 function parseTab(op: string, status: number, v: unknown): Tab {
   if (typeof v === "object" && v !== null) {
-    const { id, label, exited, hidden } = v as Record<string, unknown>
-    if (typeof id === "string" && typeof label === "string" && typeof exited === "boolean" && typeof hidden === "boolean") {
-      if (!exited) return { id, label, hidden, end: null }
+    const { id, label, exited, hidden, title, program, renamed, cwd } = v as Record<string, unknown>
+    if (
+      typeof id === "string" &&
+      typeof label === "string" &&
+      typeof exited === "boolean" &&
+      typeof hidden === "boolean" &&
+      typeof title === "string" &&
+      typeof program === "string" &&
+      typeof renamed === "boolean" &&
+      typeof cwd === "string"
+    ) {
+      if (!exited) return { id, label, hidden, end: null, title, program, renamed, cwd }
       const end = parseTabEnd(v)
-      if (end !== undefined) return { id, label, hidden, end }
+      if (end !== undefined) return { id, label, hidden, end, title, program, renamed, cwd }
     }
   }
   throw new ApiError(op, status, null, `expected ${TAB_SHAPE}, got ${JSON.stringify(v)}`)
@@ -77,7 +86,8 @@ export async function listTabs(): Promise<Tab[]> {
   return v.map((t) => parseTab(op, res.status, t))
 }
 
-export async function createTab(request: { command?: string[]; label?: string }): Promise<Tab> {
+// cwd: folder relative to the host home ("" = home); the host validates it like GET /api/dirs.
+export async function createTab(request: { command?: string[]; label?: string; cwd?: string }): Promise<Tab> {
   const op = "create tab"
   const res = await call(op, "POST", "/api/tabs", request)
   return parseTab(op, res.status, await json(op, res))
@@ -108,4 +118,18 @@ export async function listSwarms(): Promise<string[]> {
     throw new ApiError(op, res.status, null, `expected string[], got ${JSON.stringify(v)}`)
   }
   return v
+}
+
+// Subfolders of a folder under the host home (GET /api/dirs?path=<rel>, "" = home).
+export type DirEntry = { name: string; hidden: boolean }
+
+export async function listDirs(path: string): Promise<DirEntry[]> {
+  const op = "list folders"
+  const res = await call(op, "GET", `/api/dirs?path=${encodeURIComponent(path)}`)
+  const v = await json(op, res)
+  const entries = typeof v === "object" && v !== null ? (v as Record<string, unknown>).entries : undefined
+  if (!Array.isArray(entries) || !entries.every((e) => typeof e?.name === "string" && typeof e?.hidden === "boolean")) {
+    throw new ApiError(op, res.status, null, `expected {path: string, entries: {name: string, hidden: boolean}[]}, got ${JSON.stringify(v)}`)
+  }
+  return entries.map((e: DirEntry) => ({ name: e.name, hidden: e.hidden }))
 }

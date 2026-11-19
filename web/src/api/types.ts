@@ -1,6 +1,9 @@
 export type TabEnd = { reason: string; exitCode: number | null; signal: number | null }
 // hidden: dropped from tab strips on every client, the process keeps running (re-shown from the New-session dialog).
-export type Tab = { id: string; label: string; hidden: boolean; end: TabEnd | null }
+// title: the program's own terminal title (Claude Code writes its session summary); program: basename of argv[0];
+// renamed: the user set the label, so the title is never appended to it.
+// cwd: start folder relative to the host home ("" = home); absolute when outside home (a tab not created by roosterm).
+export type Tab = { id: string; label: string; hidden: boolean; end: TabEnd | null; title: string; program: string; renamed: boolean; cwd: string }
 
 const isIntOrNull = (v: unknown): v is number | null => v === null || Number.isInteger(v)
 
