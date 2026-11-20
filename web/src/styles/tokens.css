@@ -77,8 +77,6 @@
   --fs-subtitle2: 16px; --lh-subtitle2: 22px;
   --fs-subtitle1: 20px; --lh-subtitle1: 28px;
   --fs-title3: 24px;   --lh-title3: 32px;
-  --fs-title2: 28px;   --lh-title2: 36px;
-  --fs-term: 13px;     --lh-term: 20px;
 
   /* Terminal metrics read by terminal-theme.ts: unitless px font size and unitless px row height (mockup 13px/20px) */
   --terminal-font-size: 13;

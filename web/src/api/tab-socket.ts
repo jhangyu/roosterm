@@ -1,6 +1,6 @@
 import { parseTabEnd, type TabEnd } from "./types"
 
-// Wire constants owned by the backend plan (HTTP/WS API section, commit 86de08a).
+// Wire constants owned by docs/api.md ("WebSocket").
 const CLOSE_EXITED = 4000
 const CLOSE_NOT_FOUND = 4004
 const CLOSE_BAD_MESSAGE = 4400
@@ -18,7 +18,7 @@ export type SocketEnd =
   | { kind: "disconnected"; code: number; reason: string }
   | { kind: "protocol-error"; message: string }
 
-export type TabSocketHandlers = {
+type TabSocketHandlers = {
   onOpen: () => void
   onOutput: (data: Uint8Array) => void
   onCore: (state: CoreState) => void

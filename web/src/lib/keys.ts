@@ -1,4 +1,4 @@
-export const SPECIAL_KEYS = ["esc", "tab", "shift-tab", "ctrl-c", "ctrl-d", "up", "down", "left", "right"] as const
+const SPECIAL_KEYS = ["esc", "tab", "shift-tab", "ctrl-c", "ctrl-d", "up", "down", "left", "right"] as const
 export type SpecialKey = (typeof SPECIAL_KEYS)[number]
 
 const ESC = "\x1b"

@@ -8,7 +8,7 @@ import { onResume } from "@/lib/resume"
 import { readTerminalLook } from "@/lib/terminal-theme"
 import { cn } from "@/lib/utils"
 import { KeyBar } from "./KeyBar"
-import { DESKTOP_QUERY, lineHeightForRow, readPhoneMetrics } from "./metrics"
+import { DESKTOP_QUERY, lineHeightForRow } from "./metrics"
 import { ExitPanel, StatusBanner } from "./StatusBanner"
 import { StatusFooter, type FooterInfo } from "./StatusFooter"
 import { attachTouchScroll } from "./touch-scroll"
@@ -18,7 +18,7 @@ const SCROLLBACK_LINES = 5000
 const CTRL_LETTER_OFFSET = 64 // "C" (67) - 64 = 0x03 (^C)
 const LETTER = /^[a-zA-Z]$/
 
-export type TerminalPaneProps = {
+type TerminalPaneProps = {
   tab: Tab
   onExited: (tabId: string, end: TabEnd) => void
   onClose: (tabId: string) => void
@@ -117,15 +117,15 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
     const host = hostRef.current
     if (host === null) throw new Error(`tab ${tab.id}: expected terminal host element, got none`)
     const look = readTerminalLook()
-    const phone = readPhoneMetrics()
     const desktop = window.matchMedia(DESKTOP_QUERY)
     // `rowHeightPx` in both metric sets is the target row height in px (tokens.css), converted to xterm's ratio here.
     const metrics = () => {
-      const m = desktop.matches ? look : phone
+      const m = desktop.matches ? look.desktop : look.phone
       return { fontSize: m.fontSize, lineHeight: lineHeightForRow(look.fontFamily, m.fontSize, m.rowHeightPx) }
     }
     const term = new Terminal({
-      ...look,
+      theme: look.theme,
+      fontFamily: look.fontFamily,
       fontSize: metrics().fontSize,
       lineHeight: metrics().lineHeight,
       cursorBlink: true,

@@ -15,27 +15,30 @@ const THEME_VARS = {
   white: "--term-white", brightWhite: "--term-bright-white",
 } as const satisfies Partial<Record<keyof ITheme, string>>
 
-export type TerminalLook = { theme: ITheme; fontFamily: string; fontSize: number; rowHeightPx: number }
+type TerminalMetrics = { fontSize: number; rowHeightPx: number }
+type TerminalLook = { theme: ITheme; fontFamily: string; desktop: TerminalMetrics; phone: TerminalMetrics }
+
+function readVar(style: CSSStyleDeclaration, name: string): string {
+  const v = style.getPropertyValue(name).trim()
+  if (v === "") throw new Error(`terminal look: expected CSS variable ${name} in web/src/styles/tokens.css, found none`)
+  return v
+}
+
+function readNumber(style: CSSStyleDeclaration, name: string): number {
+  const v = readVar(style, name)
+  const n = Number(v)
+  if (!Number.isFinite(n)) throw new Error(`terminal look: expected ${name} to be a unitless number, got ${JSON.stringify(v)}`)
+  return n
+}
 
 export function readTerminalLook(): TerminalLook {
-  const css = getComputedStyle(document.documentElement)
-  const read = (name: string) => {
-    const v = css.getPropertyValue(name).trim()
-    if (v === "") throw new Error(`terminal look: expected CSS variable ${name} in web/src/styles/tokens.css, found none`)
-    return v
-  }
-  const num = (name: string) => {
-    const v = read(name)
-    const n = Number(v)
-    if (!Number.isFinite(n)) throw new Error(`terminal look: expected ${name} to be a unitless number, got ${JSON.stringify(v)}`)
-    return n
-  }
+  const style = getComputedStyle(document.documentElement)
   const theme: ITheme = {}
-  for (const [key, name] of Object.entries(THEME_VARS)) theme[key as keyof typeof THEME_VARS] = read(name)
+  for (const [key, name] of Object.entries(THEME_VARS)) theme[key as keyof typeof THEME_VARS] = readVar(style, name)
   return {
     theme,
-    fontFamily: read("--app-font-mono"),
-    fontSize: num("--terminal-font-size"),
-    rowHeightPx: num("--terminal-row-height"),
+    fontFamily: readVar(style, "--app-font-mono"),
+    desktop: { fontSize: readNumber(style, "--terminal-font-size"), rowHeightPx: readNumber(style, "--terminal-row-height") },
+    phone: { fontSize: readNumber(style, "--terminal-font-size-phone"), rowHeightPx: readNumber(style, "--terminal-row-height-phone") },
   }
 }
