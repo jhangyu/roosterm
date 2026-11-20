@@ -12,7 +12,7 @@ import { DESKTOP_QUERY, lineHeightForRow } from "./metrics"
 import { ExitPanel, StatusBanner } from "./StatusBanner"
 import { StatusFooter, type FooterInfo } from "./StatusFooter"
 import { attachTouchScroll } from "./touch-scroll"
-import { canReconnect, type PaneState } from "./pane-state"
+import { canReconnect, isDetached, type PaneState } from "./pane-state"
 
 const SCROLLBACK_LINES = 5000
 const CTRL_LETTER_OFFSET = 64 // "C" (67) - 64 = 0x03 (^C)
@@ -37,7 +37,6 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
   const [ctrlLatched, setCtrlLatched] = useState(false)
   const [footer, setFooter] = useState<FooterInfo>({ cols: 0, rows: 0, scrollbackLines: 0, lastOutput: null, endedAt: null })
   const lastOutputRef = useRef<Date | null>(null)
-  const disconnectedAtRef = useRef<number | null>(null)
   // Socket callbacks and the resume listener outlive renders; they read the latest state/props via refs.
   const stateRef = useRef<PaneState>(initial)
   const ctrlRef = useRef(false)
@@ -65,7 +64,6 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
 
   const handleEnd = (end: SocketEnd) => {
     socketRef.current = null
-    disconnectedAtRef.current = end.kind === "disconnected" ? Date.now() : null
     setPane({ kind: "ended", end })
     switch (end.kind) {
       case "exited":
@@ -86,7 +84,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
     setPane(core === "offline" ? { kind: "core-offline", notice: null } : { kind: "live" })
   }
 
-  // Shown only while the core is offline; otherwise the socket attaches it to the 4400/4500 close that follows.
+  // Shown only while the core is offline; otherwise the socket attaches it to the bad-message or core-error close that follows.
   const handleServerError = (message: string) => {
     if (stateRef.current.kind === "core-offline") setPane({ kind: "core-offline", notice: message })
   }
@@ -126,8 +124,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
     const term = new Terminal({
       theme: look.theme,
       fontFamily: look.fontFamily,
-      fontSize: metrics().fontSize,
-      lineHeight: metrics().lineHeight,
+      ...metrics(),
       cursorBlink: true,
       scrollback: SCROLLBACK_LINES,
     })
@@ -139,8 +136,9 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
     const syncSize = () => setFooter((f) => ({ ...f, cols: term.cols, rows: term.rows }))
     syncSize()
     const applyMetrics = () => {
-      term.options.fontSize = metrics().fontSize
-      term.options.lineHeight = metrics().lineHeight
+      const m = metrics()
+      term.options.fontSize = m.fontSize
+      term.options.lineHeight = m.lineHeight
       fit.fit()
     }
     desktop.addEventListener("change", applyMetrics)
@@ -198,12 +196,12 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
   }
 
   // Mockup 3 `.term-card.dim`: frozen, greyed terminal while detached (not while connecting or when exited).
-  const dimmed = state.kind === "core-offline" || (state.kind === "ended" && state.end.kind !== "exited")
+  const dimmed = isDetached(state)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <StatusBanner state={state} disconnectedAt={disconnectedAtRef.current} onReconnect={connect} />
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-[var(--term-background)] shadow-8">
+      <StatusBanner state={state} onReconnect={connect} />
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg bg-(--term-background) shadow-8">
         <div
           className={cn(
             "min-h-0 flex-1 overflow-hidden p-3.5 md:px-7 md:py-[22px]",
@@ -213,7 +211,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
           {/* touch-none: the drag scrolls the terminal (touch-scroll.ts), never the page. */}
           <div ref={hostRef} className="h-full w-full touch-none" />
         </div>
-        {dimmed && <div className="pointer-events-none absolute inset-0 bg-[color:var(--grey-98)]/25" />}
+        {dimmed && <div className="pointer-events-none absolute inset-0 bg-grey-98/25" />}
         <StatusFooter state={state} info={footer} />
         {state.kind === "ended" && state.end.kind === "exited" && (
           <ExitPanel end={state.end.end} onClose={() => onClose(tab.id)} onRestart={onRestart} />

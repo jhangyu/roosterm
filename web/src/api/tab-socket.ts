@@ -13,9 +13,9 @@ export type CoreState = "offline" | "online"
 export type SocketEnd =
   | { kind: "exited"; end: TabEnd }
   | { kind: "not-found"; reason: string }
-  | { kind: "server-error"; code: number; detail: string }
+  | { kind: "server-error"; badMessage: boolean; detail: string }
   | { kind: "server-shutdown" }
-  | { kind: "disconnected"; code: number; reason: string }
+  | { kind: "disconnected"; at: Date }
   | { kind: "protocol-error"; message: string }
 
 type TabSocketHandlers = {
@@ -53,7 +53,7 @@ function parseControl(tabId: string, text: string): Control {
   return invalid
 }
 
-function classifyClose(tabId: string, code: number, reason: string, lastError: string | null): SocketEnd {
+function classifyClose(tabId: string, code: number, reason: string, lastError: string | null, at: Date): SocketEnd {
   switch (code) {
     case CLOSE_EXITED: {
       let parsed: unknown
@@ -75,11 +75,11 @@ function classifyClose(tabId: string, code: number, reason: string, lastError: s
       return { kind: "not-found", reason }
     case CLOSE_BAD_MESSAGE:
     case CLOSE_HC_ERROR:
-      return { kind: "server-error", code, detail: lastError ?? reason }
+      return { kind: "server-error", badMessage: code === CLOSE_BAD_MESSAGE, detail: lastError ?? reason }
     case CLOSE_GOING_AWAY:
       return { kind: "server-shutdown" }
     default:
-      return { kind: "disconnected", code, reason }
+      return { kind: "disconnected", at }
   }
 }
 
@@ -117,7 +117,7 @@ export function openTabSocket(tabId: string, size: { cols: number; rows: number 
         return
     }
   }
-  ws.onclose = (ev) => end(classifyClose(tabId, ev.code, ev.reason, lastError))
+  ws.onclose = (ev) => end(classifyClose(tabId, ev.code, ev.reason, lastError, new Date()))
 
   const requireOpen = (what: string) => {
     if (ws.readyState !== WebSocket.OPEN) {

@@ -1,5 +1,4 @@
-const SPECIAL_KEYS = ["esc", "tab", "shift-tab", "ctrl-c", "ctrl-d", "up", "down", "left", "right"] as const
-export type SpecialKey = (typeof SPECIAL_KEYS)[number]
+export type SpecialKey = "esc" | "tab" | "shift-tab" | "up" | "down" | "left" | "right"
 
 const ESC = "\x1b"
 
@@ -9,8 +8,6 @@ export function keySequence(key: SpecialKey, applicationCursor: boolean): string
     case "esc": return ESC
     case "tab": return "\t"
     case "shift-tab": return `${ESC}[Z`
-    case "ctrl-c": return "\x03"
-    case "ctrl-d": return "\x04"
     case "up": return `${arrow}A`
     case "down": return `${arrow}B`
     case "right": return `${arrow}C`

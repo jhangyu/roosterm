@@ -11,6 +11,11 @@ export type PaneState =
 export const canReconnect = (s: PaneState) =>
   s.kind === "ended" && s.end.kind !== "exited" && s.end.kind !== "not-found"
 
+// Frozen, input-paused card: core offline, or the socket ended without the tab exiting.
+export const isDetached = (s: PaneState) => s.kind === "core-offline" || (s.kind === "ended" && s.end.kind !== "exited")
+
+export const formatTime = (d: Date) => d.toLocaleTimeString("en-GB", { hour12: false })
+
 export function endLabel(end: TabEnd): string {
   if (end.exitCode !== null) return `Exited (code ${end.exitCode})`
   if (end.signal !== null) return `Exited (signal ${end.signal})`
