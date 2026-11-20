@@ -58,7 +58,7 @@ func serveConfig(path string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	sessions, err := auth.OpenSessions(config.SessionsPath(path), cfg.SessionTTL, time.Now)
+	sessions, err := auth.OpenSessions(config.SessionsPath(path), cfg.SessionTTL, time.Now, cfg.PasswordHash)
 	if err != nil {
 		return errors.Join(err, sup.Close())
 	}

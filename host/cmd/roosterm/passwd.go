@@ -25,6 +25,7 @@ func passwd(args []string, stdin *os.File, stdout, stderr io.Writer) int {
 		return exitError
 	}
 	fmt.Fprintf(stdout, "wrote %s\n", path)
+	fmt.Fprintln(stdout, "restart roosterm serve to apply: until then the old password and all existing sessions stay valid; after restart every device is logged out")
 	return exitOK
 }
 

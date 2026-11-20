@@ -1,6 +1,8 @@
 package auth_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,10 +68,54 @@ func (c *fakeClock) now() time.Time { return c.t }
 
 func newClock() *fakeClock { return &fakeClock{t: time.Unix(1_800_000_000, 0)} }
 
+// testHash stands in for a PHC password hash; sessions bind to it.
+const testHash = "$argon2id$test-hash-1"
+
+func TestPasswordChangeRevokesSessions(t *testing.T) {
+	t.Parallel()
+	const newHash = "$argon2id$test-hash-2"
+	clk := newClock()
+	path := filepath.Join(t.TempDir(), "sessions.json")
+	open := func(hash string) *auth.Sessions {
+		t.Helper()
+		s, err := auth.OpenSessions(path, time.Hour, clk.now, hash)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	a := open(testHash)
+	stolen, err := a.Create()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !open(testHash).Valid(stolen) {
+		t.Fatal("same hash reopen: expected the session to survive")
+	}
+	// The live server still holds the old hash and re-persists its map after passwd ran.
+	if _, err := a.Create(); err != nil {
+		t.Fatal(err)
+	}
+	if open(newHash).Valid(stolen) {
+		t.Fatal("after password change and restart: expected the old session to be invalid")
+	}
+	sum := sha256.Sum256([]byte(stolen))
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), hex.EncodeToString(sum[:])) {
+		t.Fatal("sessions file after restart: expected the old token hash to be purged from disk")
+	}
+	if open(testHash).Valid(stolen) {
+		t.Fatal("old password hash restored by hand: expected the old session to stay invalid")
+	}
+}
+
 func TestSessionExpiry(t *testing.T) {
 	t.Parallel()
 	clk := newClock()
-	s, err := auth.OpenSessions(filepath.Join(t.TempDir(), "sessions.json"), time.Hour, clk.now)
+	s, err := auth.OpenSessions(filepath.Join(t.TempDir(), "sessions.json"), time.Hour, clk.now, testHash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +142,7 @@ func TestSessionsSurviveReopen(t *testing.T) {
 	t.Parallel()
 	clk := newClock()
 	path := filepath.Join(t.TempDir(), "sessions.json")
-	s, err := auth.OpenSessions(path, time.Hour, clk.now)
+	s, err := auth.OpenSessions(path, time.Hour, clk.now, testHash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +150,7 @@ func TestSessionsSurviveReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s2, err := auth.OpenSessions(path, time.Hour, clk.now)
+	s2, err := auth.OpenSessions(path, time.Hour, clk.now, testHash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +163,7 @@ func TestSessionsSurviveReopen(t *testing.T) {
 	if err := s2.Delete("unknown"); err != nil {
 		t.Fatalf("delete unknown: expected nil, got %v", err)
 	}
-	s3, err := auth.OpenSessions(path, time.Hour, clk.now)
+	s3, err := auth.OpenSessions(path, time.Hour, clk.now, testHash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +176,7 @@ func TestSessionsFileMode(t *testing.T) {
 	t.Parallel()
 	clk := newClock()
 	path := filepath.Join(t.TempDir(), "sessions.json")
-	s, err := auth.OpenSessions(path, time.Hour, clk.now)
+	s, err := auth.OpenSessions(path, time.Hour, clk.now, testHash)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +193,7 @@ func TestSessionsFileMode(t *testing.T) {
 	if err := os.Chmod(path, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := auth.OpenSessions(path, time.Hour, clk.now); err == nil || !strings.Contains(err.Error(), "expected mode 0600") {
+	if _, err := auth.OpenSessions(path, time.Hour, clk.now, testHash); err == nil || !strings.Contains(err.Error(), "expected mode 0600") {
 		t.Fatalf("0644 file: expected mode error, got %v", err)
 	}
 	if err := os.WriteFile(path, []byte("{broken"), 0o600); err != nil {
@@ -156,7 +202,7 @@ func TestSessionsFileMode(t *testing.T) {
 	if err := os.Chmod(path, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := auth.OpenSessions(path, time.Hour, clk.now); err == nil {
+	if _, err := auth.OpenSessions(path, time.Hour, clk.now, testHash); err == nil {
 		t.Fatal("broken JSON: expected error, got nil")
 	}
 }

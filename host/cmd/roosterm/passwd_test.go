@@ -63,3 +63,22 @@ func TestSetPasswordRejectsMismatchedRepeat(t *testing.T) {
 		t.Fatalf("config %s: expected no file written, got stat error %v", path, err)
 	}
 }
+
+func TestSetPasswordSamePasswordGivesDifferentHash(t *testing.T) {
+	t.Setenv("SHELL", "/bin/sh")
+	var hashes [2]string
+	for i := range hashes {
+		path, err := runPasswd(t, "u\npw\npw\n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := config.Load(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hashes[i] = cfg.PasswordHash
+	}
+	if hashes[0] == hashes[1] {
+		t.Fatalf("two passwd runs with the same password: expected different hashes, got %q twice", hashes[0])
+	}
+}

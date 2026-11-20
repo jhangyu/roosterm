@@ -23,16 +23,18 @@ const (
 	sessionFileMode fs.FileMode = 0o600
 )
 
-// Sessions stores sha256(token) → expiry in a JSON file. Safe for concurrent use.
+// Sessions stores sha256(token) → expiry in a JSON file bound to one password hash. Safe for concurrent use.
 type Sessions struct {
 	mu      sync.Mutex
 	path    string
 	ttl     time.Duration
 	now     Clock
+	epoch   string           // sha256 hex of the password hash the file is bound to
 	entries map[string]int64 // sha256 hex → expires unix ms
 }
 
 type sessionFile struct {
+	Epoch    string         `json:"epoch"`
 	Sessions []sessionEntry `json:"sessions"`
 }
 
@@ -42,8 +44,9 @@ type sessionEntry struct {
 }
 
 // OpenSessions loads path (missing file = empty store). A file readable by others or with broken JSON is an error.
-func OpenSessions(path string, ttl time.Duration, now Clock) (*Sessions, error) {
-	s := &Sessions{path: path, ttl: ttl, now: now, entries: map[string]int64{}}
+// The file is bound to passwordHash: a file written for another hash is dropped and rewritten empty.
+func OpenSessions(path string, ttl time.Duration, now Clock, passwordHash string) (*Sessions, error) {
+	s := &Sessions{path: path, ttl: ttl, now: now, epoch: hashToken(passwordHash), entries: map[string]int64{}}
 	info, err := os.Stat(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return s, nil
@@ -61,6 +64,12 @@ func OpenSessions(path string, ttl time.Duration, now Clock) (*Sessions, error) 
 	var f sessionFile
 	if err := json.Unmarshal(b, &f); err != nil {
 		return nil, fmt.Errorf("sessions %s: expected {\"sessions\":[...]} JSON, got %w", path, err)
+	}
+	if f.Epoch != s.epoch {
+		if err := s.saveLocked(); err != nil { // s is not shared yet, no lock needed
+			return nil, err
+		}
+		return s, nil
 	}
 	nowMS := now().UnixMilli()
 	for _, e := range f.Sessions {
@@ -121,7 +130,7 @@ func (s *Sessions) Delete(token string) error {
 }
 
 func (s *Sessions) saveLocked() error {
-	f := sessionFile{Sessions: []sessionEntry{}}
+	f := sessionFile{Epoch: s.epoch, Sessions: []sessionEntry{}}
 	for h, exp := range s.entries {
 		f.Sessions = append(f.Sessions, sessionEntry{Hash: h, ExpiresMS: exp})
 	}
