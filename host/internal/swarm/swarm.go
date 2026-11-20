@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -65,4 +66,54 @@ func probe(path string) (bool, error) {
 		return false, fmt.Errorf("swarm remove dead socket %s: expected removed or already gone, got %w", path, err)
 	}
 	return false, nil
+}
+
+// ClaudeProgram is the pane_current_command of a Claude member pane.
+const ClaudeProgram = "claude.exe"
+
+// MemberTarget picks the "session:window" holding the most Claude member panes from
+// `tmux list-panes -a -F "#{session_name}:#{window_index} #{pane_current_command}"` output.
+// Ties go to the first window listed. ok is false when no pane runs ClaudeProgram.
+func MemberTarget(listPanes string) (target string, ok bool) {
+	counts := map[string]int{}
+	order := []string{}
+	for _, line := range strings.Split(listPanes, "\n") {
+		window, command, found := strings.Cut(line, " ")
+		if !found || command != ClaudeProgram {
+			continue
+		}
+		if counts[window] == 0 {
+			order = append(order, window)
+		}
+		counts[window]++
+	}
+	for _, w := range order {
+		if !ok || counts[w] > counts[target] {
+			target, ok = w, true
+		}
+	}
+	return target, ok
+}
+
+// AttachArgv is the command that attaches to the swarm socket name, targeting the window with the member panes
+// (a bare attach shows the session's active window, which may be an idle shell). No member pane: the bare attach.
+func AttachArgv(dir, name string) ([]string, error) {
+	out, err := exec.Command("tmux", "-S", filepath.Join(dir, name), "list-panes", "-a",
+		"-F", "#{session_name}:#{window_index} #{pane_current_command}").Output()
+	if err != nil {
+		return nil, fmt.Errorf("swarm list-panes %s: expected tmux exit 0, got %w", name, err)
+	}
+	argv := []string{"tmux", "-S", filepath.Join(dir, name), "a"}
+	if target, ok := MemberTarget(string(out)); ok {
+		argv = append(argv, "-t", target)
+	}
+	return argv, nil
+}
+
+// IsAttachArgv reports whether argv is the plain swarm attach `tmux -L claude-swarm-* a` and returns the socket name.
+func IsAttachArgv(argv []string) (name string, ok bool) {
+	if len(argv) == 4 && argv[0] == "tmux" && argv[1] == "-L" && strings.HasPrefix(argv[2], Prefix) && argv[3] == "a" {
+		return argv[2], true
+	}
+	return "", false
 }

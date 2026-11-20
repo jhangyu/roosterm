@@ -151,4 +151,4 @@ ponytail: one dial per event; if the dial lands between the new core's bind and 
 
 ## 7. Environment
 
-The core passes its own start environment to every program. Start it from launchd/systemd (see `deploy/`), never from an agent shell (a core started inside Claude Code leaked `CLAUDE_CODE_CHILD_SESSION` into `claude`).
+The core passes its own start environment to every program. Start it from launchd/systemd (see `deploy/`), never from an agent shell: both the core and the terminal holder can carry a dirty start env (a core started inside Claude Code leaked `TMUX`, `TMUX_PANE` and `CLAUDE*` into `claude`). roosterm therefore wraps every tab's argv in `/bin/sh -c 'unset TMUX TMUX_PANE CLAUDE*…; exec "$@"'` (`api.ScrubArgv`), keeping `HC_*`, `TERM*` and `TMUX_TMPDIR`. `hc server restart --fresh` from a clean shell repairs a dirty core.

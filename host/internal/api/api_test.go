@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -90,7 +91,7 @@ func TestCreateTabDefaultShell(t *testing.T) {
 		t.Fatalf("tab: got %+v", tab)
 	}
 	term, ok := e.fake.Get("t1")
-	if !ok || !slices.Equal(term.Argv, []string{"/bin/zsh", "-l"}) || term.Cwd != e.home ||
+	if !ok || !slices.Equal(term.Argv, api.ScrubArgv([]string{"/bin/zsh", "-l"})) || term.Cwd != e.home ||
 		term.Labels[hc.LabelOwner] != hc.LabelOwnerTab || term.Labels[hc.LabelName] != "~" || term.Cols != 80 || term.Rows != 24 {
 		t.Fatalf("hc terminal: got %+v", term)
 	}
@@ -99,7 +100,7 @@ func TestCreateTabDefaultShell(t *testing.T) {
 func TestCreateTabCommandAndLabel(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	rec := e.do("POST", "/api/tabs", `{"command":["tmux","-L","claude-swarm-4242","a"],"label":"swarm 4242"}`)
+	rec := e.do("POST", "/api/tabs", `{"command":["tmux","-L","other-4242","a"],"label":"swarm 4242"}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: expected 201, got %d %s", rec.Code, rec.Body)
 	}
@@ -107,7 +108,7 @@ func TestCreateTabCommandAndLabel(t *testing.T) {
 		t.Fatalf("label: got %q", tab.Label)
 	}
 	term, _ := e.fake.Get("t1")
-	if !slices.Equal(term.Argv, []string{"tmux", "-L", "claude-swarm-4242", "a"}) {
+	if !slices.Equal(term.Argv, api.ScrubArgv([]string{"tmux", "-L", "other-4242", "a"})) {
 		t.Fatalf("argv: got %v", term.Argv)
 	}
 }
@@ -245,7 +246,7 @@ func TestListTabsOnlyRoostermInOrder(t *testing.T) {
 	e.fake.Seed(tabTerm("x3", 30, "c"))
 	titled := tabTerm("x2", 20, "b")
 	titled.Title, titled.Cwd = "Fix the login bug", filepath.Join(e.home, "proj")
-	titled.Argv = []string{"/usr/local/bin/claude", "--resume"}
+	titled.Argv = api.ScrubArgv([]string{"/usr/local/bin/claude", "--resume"})
 	e.fake.Seed(titled)
 	done := tabTerm("x4", 40, "d")
 	reason, code := "exited", 0
@@ -392,5 +393,28 @@ func TestSwarmsEndpoint(t *testing.T) {
 	rec := e.do("GET", "/api/swarms", "")
 	if rec.Code != http.StatusOK || rec.Body.String() != "[\"claude-swarm-7\"]\n" {
 		t.Fatalf("swarms: expected 200 [\"claude-swarm-7\"], got %d %q", rec.Code, rec.Body)
+	}
+}
+
+func TestScrubArgvDropsClaudeAndTmuxEnvKeepsRest(t *testing.T) {
+	t.Parallel()
+	argv := api.ScrubArgv([]string{"/usr/bin/env"})
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Env = []string{"TMUX=/x,1,0", "TMUX_PANE=%1", "CLAUDECODE=1", "CLAUDE_CODE_X=1", "CLAUDE_PID=9",
+		"HC_TERMINAL_ID=t9", "TMUX_TMPDIR=/keep", "PATH=" + os.Getenv("PATH")}
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("run scrubbed env: expected exit 0, got %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for _, l := range got {
+		if strings.HasPrefix(l, "TMUX=") || strings.HasPrefix(l, "TMUX_PANE=") || strings.HasPrefix(l, "CLAUDE") {
+			t.Fatalf("env line %q survived the scrub", l)
+		}
+	}
+	for _, want := range []string{"HC_TERMINAL_ID=t9", "TMUX_TMPDIR=/keep"} {
+		if !slices.Contains(got, want) {
+			t.Fatalf("expected %q kept, got %v", want, got)
+		}
 	}
 }

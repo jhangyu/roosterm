@@ -10,6 +10,31 @@ import (
 	"roosterm/host/internal/swarm"
 )
 
+func TestMemberTargetPicksWindowWithMostClaudePanes(t *testing.T) {
+	t.Parallel()
+	got, ok := swarm.MemberTarget("s:0 zsh\ns:1 claude.exe\ns:15 zsh\ns:15 claude.exe\ns:15 claude.exe\n")
+	if !ok || got != "s:15" {
+		t.Fatalf("expected s:15, got %q ok=%v", got, ok)
+	}
+	if got, ok := swarm.MemberTarget("s:0 zsh\n"); ok {
+		t.Fatalf("expected no target without claude panes, got %q", got)
+	}
+}
+
+func TestAttachArgvUsesFullSocketPath(t *testing.T) {
+	bin := t.TempDir()
+	stub := "#!/bin/sh\necho 's:3 claude.exe'\n"
+	if err := os.WriteFile(filepath.Join(bin, "tmux"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	got, err := swarm.AttachArgv("/d/tmux-501", "claude-swarm-7")
+	want := []string{"tmux", "-S", "/d/tmux-501/claude-swarm-7", "a", "-t", "s:3"}
+	if err != nil || !slices.Equal(got, want) {
+		t.Fatalf("expected %v, got %v err=%v", want, got, err)
+	}
+}
+
 func TestListOnlyClaudeSwarmSockets(t *testing.T) {
 	t.Parallel()
 	dir, err := os.MkdirTemp("", "rt")

@@ -12,6 +12,7 @@ import (
 
 	"roosterm/host/internal/apierr"
 	"roosterm/host/internal/hc"
+	"roosterm/host/internal/swarm"
 )
 
 const maxLabelLen = 64
@@ -109,6 +110,13 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if name, ok := swarm.IsAttachArgv(argv); ok {
+		var err error
+		if argv, err = swarm.AttachArgv(s.o.SwarmDir, name); err != nil {
+			apierr.Write(w, &apierr.Error{Status: http.StatusInternalServerError, Op: op, Kind: apierr.KindInternal, Message: err.Error()})
+			return
+		}
+	}
 	cwd, e := s.resolveDir(op, req.Cwd)
 	if e != nil {
 		apierr.Write(w, e)
@@ -135,7 +143,7 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, e)
 		return
 	}
-	t, err := c.Run(r.Context(), hc.RunParams{Argv: argv, Cwd: cwd, Size: initialSize, NoParent: true,
+	t, err := c.Run(r.Context(), hc.RunParams{Argv: ScrubArgv(argv), Cwd: cwd, Size: initialSize, NoParent: true,
 		Labels: map[string]string{hc.LabelOwner: hc.LabelOwnerTab, hc.LabelName: label}})
 	if err != nil {
 		apierr.Write(w, hcError(op, "", err))

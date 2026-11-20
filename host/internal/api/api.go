@@ -58,6 +58,7 @@ func toTab(home string, t hc.Terminal) Tab {
 }
 
 func program(argv []string) string {
+	argv = unscrubbed(argv)
 	if len(argv) == 0 {
 		return ""
 	}
