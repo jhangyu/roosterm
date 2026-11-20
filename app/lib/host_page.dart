@@ -26,6 +26,12 @@ class _HostPageState extends State<HostPage> {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(NavigationDelegate(
+        onNavigationRequest: (request) {
+          if (widget.host.sameOrigin(request.url)) return NavigationDecision.navigate;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Blocked: ${request.url} is outside ${widget.host.url.origin}')));
+          return NavigationDecision.prevent;
+        },
         onWebResourceError: (e) {
           // null = platform did not say; treat as main frame so the failure is visible.
           if (e.isForMainFrame ?? true) setState(() => _error = e);

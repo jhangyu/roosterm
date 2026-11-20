@@ -21,6 +21,16 @@ class Host {
     return Host(n, u);
   }
 
+  /// True when [target] is on this host's origin (https, same host, same port, no userinfo).
+  bool sameOrigin(String target) {
+    final t = Uri.tryParse(target);
+    return t != null &&
+        t.scheme == 'https' &&
+        t.userInfo.isEmpty &&
+        t.host == url.host &&
+        t.port == url.port;
+  }
+
   Map<String, String> toJson() => {'name': name, 'url': url.toString()};
 }
 
