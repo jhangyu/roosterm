@@ -23,24 +23,14 @@ function parseMemory(raw: string): FolderMemory {
   throw new Error(`${STORE_KEY}: expected {recent: string[], showHidden: boolean}, got ${raw}`)
 }
 
-// Per-device memory. Storage can be unavailable (private mode, quota) or hold another build's shape: the picker
-// then starts at home as on a first open, and the reason is logged.
+// Per-device memory. Storage can be unavailable (private mode, quota) or hold another build's shape: both throw.
 export function loadMemory(): FolderMemory {
-  try {
-    const raw = window.localStorage.getItem(STORE_KEY)
-    return raw === null ? { recent: [], showHidden: false } : parseMemory(raw)
-  } catch (e) {
-    console.warn(`folder picker: remembered folders ignored: ${e instanceof Error ? e.message : String(e)}`)
-    return { recent: [], showHidden: false }
-  }
+  const raw = window.localStorage.getItem(STORE_KEY)
+  return raw === null ? { recent: [], showHidden: false } : parseMemory(raw)
 }
 
 export function saveMemory(memory: FolderMemory): void {
-  try {
-    window.localStorage.setItem(STORE_KEY, JSON.stringify(memory))
-  } catch (e) {
-    console.warn(`folder picker: could not remember folders: ${e instanceof Error ? e.message : String(e)}`)
-  }
+  window.localStorage.setItem(STORE_KEY, JSON.stringify(memory))
 }
 
 export const withRecent = (recent: string[], path: string) => [path, ...recent.filter((p) => p !== path)].slice(0, RECENT_MAX)

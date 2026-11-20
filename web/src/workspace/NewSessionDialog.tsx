@@ -8,9 +8,10 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } fr
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { BTN, BTN_PRIMARY, ICON_BTN } from "./classes"
-import { FolderPicker, KBD, RecentFolders, StartsIn, useFolderBrowser } from "./FolderPicker"
+import { FolderPicker, KBD, RecentFolders, StartsIn } from "./FolderPicker"
 import { baseName } from "./folders"
 import { CLAUDE_COMMAND, swarmTab } from "./tabs"
+import { useFolderBrowser } from "./useFolderBrowser"
 
 type Props = {
   open: boolean
@@ -88,7 +89,8 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow,
       if (picked !== null) onCreate(swarmTab(picked))
       return
     }
-    folders.remember()
+    // A failed save keeps the dialog open: App closes it on create, which would hide the notice.
+    if (folders.remember() !== null) return
     onCreate(kind === "claude" ? { command: CLAUDE_COMMAND, cwd: folders.path } : { cwd: folders.path })
   }
   // Ctrl/Cmd+Enter = primary, wherever focus is in the dialog.

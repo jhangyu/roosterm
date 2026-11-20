@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useRef, type KeyboardEvent, type ReactNode } from "react"
 import { DropdownMenu } from "radix-ui"
-import { listDirs, type DirEntry } from "@/api/http"
-import { ApiError } from "@/api/types"
+import type { DirEntry } from "@/api/http"
 import {
   ArrowClockwiseIcon,
   ArrowUpIcon,
@@ -20,139 +19,8 @@ import {
 } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { BTN } from "./classes"
-import {
-  baseName,
-  childPath,
-  displayPath,
-  loadMemory,
-  parentPath,
-  saveMemory,
-  segments,
-  withoutRecent,
-  withRecent,
-  type FolderMemory,
-} from "./folders"
-
-// Mockup 4b (docs/mockups/4b-folder-drill.html): drill-down folder navigator. The folder the breadcrumb ends in is
-// the session's start folder.
-
-export type Listing =
-  | { kind: "loading" }
-  | { kind: "ready"; entries: DirEntry[] }
-  | { kind: "denied"; message: string } // 403 permission_denied: still a valid start folder
-  | { kind: "error"; message: string }
-  | { kind: "gone" } // 404: the only state that blocks Open
-
-type Drill = "in" | "up" | "none"
-
-// Case-insensitive natural sort (v2 before v10).
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" })
-
-export type FolderBrowser = {
-  path: string
-  listing: Listing
-  drill: Drill
-  // The remembered folder that no longer exists when the dialog opened (its nearest parent is shown instead).
-  notice: string | null
-  memory: FolderMemory
-  filter: string
-  setFilter: (filter: string) => void
-  go: (path: string) => void
-  up: () => void
-  retry: () => void
-  toggleHidden: () => void
-  // Store the current folder (and the hidden-folder toggle) as this device's last used folder.
-  remember: () => void
-}
-
-export function useFolderBrowser(open: boolean, onUnauthorized: () => void): FolderBrowser {
-  const [path, setPath] = useState("")
-  const [listing, setListing] = useState<Listing>({ kind: "loading" })
-  const [drill, setDrill] = useState<Drill>("none")
-  const [notice, setNotice] = useState<string | null>(null)
-  const [memory, setMemory] = useState<FolderMemory>({ recent: [], showHidden: false })
-  const [filter, setFilter] = useState("")
-  // Only the latest listing request may update the picker.
-  const seq = useRef(0)
-
-  // Lists `target`; with walkUp a missing folder is replaced by its nearest existing ancestor.
-  // Resolves to the folder finally shown, or null when superseded by a newer request.
-  const load = useCallback(
-    async (target: string, nextDrill: Drill, walkUp: boolean): Promise<string | null> => {
-      const id = ++seq.current
-      setPath(target)
-      setDrill(nextDrill)
-      setFilter("")
-      setListing({ kind: "loading" })
-      let p = target
-      for (;;) {
-        try {
-          const entries = await listDirs(p)
-          if (id !== seq.current) return null
-          setPath(p)
-          setListing({ kind: "ready", entries: [...entries].sort((a, b) => collator.compare(a.name, b.name)) })
-          return p
-        } catch (e) {
-          if (!(e instanceof ApiError)) throw e
-          if (id !== seq.current) return null
-          if (e.status === 401) {
-            onUnauthorized()
-            return null
-          }
-          if (e.status === 404 && walkUp && p !== "") {
-            p = parentPath(p)
-            continue
-          }
-          setPath(p)
-          if (e.status === 404) setListing({ kind: "gone" })
-          else if (e.status === 403 && e.kind === "permission_denied") setListing({ kind: "denied", message: e.detail })
-          else setListing({ kind: "error", message: e.message })
-          return p
-        }
-      }
-    },
-    [onUnauthorized],
-  )
-
-  useEffect(() => {
-    if (!open) return
-    const remembered = loadMemory()
-    const start = remembered.recent[0] ?? ""
-    setMemory(remembered)
-    setNotice(null)
-    void load(start, "none", true).then((shown) => {
-      if (shown === null || shown === start) return
-      setNotice(start)
-      // The dead entry leaves Recent; storage is rewritten on the next Open.
-      setMemory((m) => ({ ...m, recent: withoutRecent(m.recent, start) }))
-    })
-    return () => {
-      seq.current++
-    }
-  }, [open, load])
-
-  const go = (next: string) => {
-    setNotice(null)
-    void load(next, segments(next).length >= segments(path).length ? "in" : "up", false)
-  }
-  return {
-    path,
-    listing,
-    drill,
-    notice,
-    memory,
-    filter,
-    setFilter,
-    go,
-    up: () => {
-      setNotice(null)
-      if (path !== "") void load(parentPath(path), "up", true)
-    },
-    retry: () => void load(path, "none", false),
-    toggleHidden: () => setMemory((m) => ({ ...m, showHidden: !m.showHidden })),
-    remember: () => saveMemory({ recent: withRecent(memory.recent, path), showHidden: memory.showHidden }),
-  }
-}
+import { baseName, childPath, displayPath, parentPath, segments } from "./folders"
+import type { FolderBrowser } from "./useFolderBrowser"
 
 // Focus ring shared by rows, crumbs and chips (mockup 4b: 2px grey-14 ring + white inset).
 const FOCUS = "outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground focus-visible:shadow-[inset_0_0_0_3px_var(--card)]"
@@ -353,6 +221,164 @@ function RetryButton({ b }: { b: FolderBrowser }) {
   )
 }
 
+function Notice({ children }: { children: ReactNode }) {
+  return (
+    <div className="mx-1 mt-1 mb-0.5 flex items-start gap-2.5 rounded-sm bg-warning-bg px-2.5 py-2 text-caption text-grey-26 inset-ring inset-ring-warning-border" role="status">
+      <WarningIcon className="size-4 shrink-0 text-warning" />
+      <span>{children}</span>
+    </div>
+  )
+}
+
+type ListProps = { b: FolderBrowser; here: string; parentName: string; pool: DirEntry[]; matches: DirEntry[]; query: string; hiddenMatches: number; goAndFocus: (path: string) => void }
+
+function FolderList({ b, here, parentName, pool, matches, query, hiddenMatches, goAndFocus }: ListProps) {
+  switch (b.listing.kind) {
+    case "loading":
+      return (
+        // Drawn only after --picker-skeleton-delay, so fast folders never flicker.
+        <div className="animate-in fill-mode-both delay-(--picker-skeleton-delay) duration-0 fade-in" role="status">
+          <div className="flex items-center gap-2 px-3 pt-1.5 pb-0.5 text-caption text-muted-foreground">
+            <span className="size-3.5 animate-spin rounded-full border-2 border-brand-150 border-t-primary" aria-hidden="true" />
+            Reading {here}…
+          </div>
+          {[46, 62, 38, 54, 30].map((w) => (
+            <div key={w} className="grid h-10 grid-cols-[20px_1fr] items-center gap-3 px-3" aria-hidden="true">
+              <i className="block h-4 w-[18px] animate-pulse rounded-xs bg-grey-94" />
+              <i className="block h-3 animate-pulse rounded-xs bg-grey-94" style={{ width: `${w}%` }} />
+            </div>
+          ))}
+        </div>
+      )
+    case "denied":
+      return (
+        <Panel
+          alert
+          tone="error"
+          icon={<LockClosedIcon />}
+          title={`Can’t list the contents of ${here}`}
+          actions={
+            <>
+              <UpButton b={b} label={`Up to ${parentName}`} />
+              <RetryButton b={b} />
+            </>
+          }
+        >
+          <span className="text-caption break-all">{b.listing.message}</span>
+          <span className="text-grey-26">
+            You can still start here. If the host can’t enter the folder either, the new session reports that error when it starts.
+          </span>
+        </Panel>
+      )
+    case "error":
+      return (
+        <Panel alert tone="error" icon={<ErrorCircleIcon />} title={`Can’t list ${here}`} actions={<RetryButton b={b} />}>
+          <span className="break-all">{b.listing.message}</span>
+        </Panel>
+      )
+    case "gone":
+      return (
+        <Panel alert tone="error" icon={<ErrorCircleIcon />} title={`${here} no longer exists`} actions={<UpButton b={b} label={`Up to ${parentName}`} />}>
+          <span>It was moved or deleted after the parent was listed.</span>
+        </Panel>
+      )
+    case "ready":
+      if (pool.length === 0 && query === "") {
+        return (
+          <Panel icon={<FolderOpenIcon />} title={`No folders inside ${here}`} actions={<UpButton b={b} label={`Up to ${parentName}`} />}>
+            <span>It may still contain files. Start here, or go back up.</span>
+          </Panel>
+        )
+      }
+      if (matches.length === 0) {
+        return (
+          <Panel
+            icon={<SearchIcon />}
+            title={`No folder named “${b.filter}” here`}
+            actions={
+              <>
+                {hiddenMatches > 0 && (
+                  <Button variant="outline" className={RECOVERY_BTN} onClick={b.toggleHidden}>
+                    <EyeIcon className="size-4" />
+                    Include hidden folders
+                  </Button>
+                )}
+                <Button variant="ghost" className={`${RECOVERY_BTN} border-transparent bg-transparent hover:bg-foreground/5`} onClick={() => b.setFilter("")}>
+                  <DismissIcon className="size-4" />
+                  Clear filter
+                </Button>
+              </>
+            }
+          >
+            {hiddenMatches > 0 && <span>{plural(hiddenMatches, "hidden folder")} here match.</span>}
+          </Panel>
+        )
+      }
+      return (
+        <ul className="m-0 list-none p-0" aria-label={`Folders in ${here}`}>
+          {matches.map((e) => (
+            <li key={e.name}>
+              <button
+                type="button"
+                data-folder-row
+                title={e.name}
+                onClick={() => goAndFocus(childPath(b.path, e.name))}
+                className={`grid h-(--picker-row-h) w-full grid-cols-[20px_1fr_16px] items-center gap-3 rounded-sm pr-2.5 pl-3 text-left text-foreground hover:bg-grey-96 active:bg-grey-92 max-md:h-(--picker-row-h-touch) ${FOCUS} ${TRANSITION}`}
+              >
+                <FolderIcon className="size-5 text-grey-38" />
+                <span
+                  className={`truncate max-md:line-clamp-2 max-md:leading-[18px] max-md:break-all max-md:whitespace-normal ${e.hidden ? "text-grey-38" : ""}`}
+                >
+                  <Highlight name={e.name} query={query} />
+                </span>
+                <ChevronRightIcon className="size-4 text-grey-74" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )
+  }
+}
+
+function FootBar({ children }: { children: ReactNode }) {
+  return <div className="flex items-center justify-between gap-2 border-t border-grey-94 py-1.5 pr-1.5 pl-3.5 text-caption text-muted-foreground">{children}</div>
+}
+
+type FootProps = { b: FolderBrowser; ready: boolean; query: string; matches: DirEntry[]; hiddenEntries: DirEntry[]; showHidden: boolean; autoHidden: boolean }
+
+function FolderFoot({ ready, query, matches, hiddenEntries, showHidden, autoHidden, b }: FootProps) {
+  if (!ready) return null
+  if (query !== "" && matches.length > 0) {
+    return (
+      <FootBar>
+        <span>
+          Enter opens <b className="text-foreground">{matches[0].name}</b>
+        </span>
+        <span className="max-md:hidden">
+          <kbd className={KBD}>↑</kbd> <kbd className={KBD}>↓</kbd> move
+        </span>
+      </FootBar>
+    )
+  }
+  if (hiddenEntries.length === 0 || query !== "") return null
+  const names = hiddenEntries.slice(0, HIDDEN_NAMES_SHOWN).map((e) => e.name).join(", ")
+  const more = hiddenEntries.length > HIDDEN_NAMES_SHOWN ? ", …" : ""
+  return (
+    <FootBar>
+      <span className="min-w-0 truncate">
+        {showHidden ? `Showing ${plural(hiddenEntries.length, "hidden folder")}` : plural(hiddenEntries.length, "hidden folder")}
+        {!showHidden && <span className="max-md:hidden"> ({names}{more})</span>}
+      </span>
+      {!autoHidden && (
+        <Button variant="ghost" className="h-7 gap-1.5 rounded-sm px-2.5 text-caption font-semibold hover:bg-foreground/5 max-md:h-11" onClick={b.toggleHidden}>
+          {showHidden ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+          {showHidden ? "Hide" : "Show"}
+        </Button>
+      )}
+    </FootBar>
+  )
+}
+
 export function FolderPicker({ b, className = "" }: { b: FolderBrowser; className?: string }) {
   const filterRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
@@ -426,113 +452,6 @@ export function FolderPicker({ b, className = "" }: { b: FolderBrowser; classNam
     }
   }
 
-  const list = (() => {
-    switch (b.listing.kind) {
-      case "loading":
-        return (
-          // Drawn only after --picker-skeleton-delay, so fast folders never flicker.
-          <div className="animate-in fill-mode-both delay-(--picker-skeleton-delay) duration-0 fade-in" role="status">
-            <div className="flex items-center gap-2 px-3 pt-1.5 pb-0.5 text-caption text-muted-foreground">
-              <span className="size-3.5 animate-spin rounded-full border-2 border-brand-150 border-t-primary" aria-hidden="true" />
-              Reading {here}…
-            </div>
-            {[46, 62, 38, 54, 30].map((w) => (
-              <div key={w} className="grid h-10 grid-cols-[20px_1fr] items-center gap-3 px-3" aria-hidden="true">
-                <i className="block h-4 w-[18px] animate-pulse rounded-xs bg-grey-94" />
-                <i className="block h-3 animate-pulse rounded-xs bg-grey-94" style={{ width: `${w}%` }} />
-              </div>
-            ))}
-          </div>
-        )
-      case "denied":
-        return (
-          <Panel
-            alert
-            tone="error"
-            icon={<LockClosedIcon />}
-            title={`Can’t list the contents of ${here}`}
-            actions={
-              <>
-                <UpButton b={b} label={`Up to ${parentName}`} />
-                <RetryButton b={b} />
-              </>
-            }
-          >
-            <span className="text-caption break-all">{b.listing.message}</span>
-            <span className="text-grey-26">
-              You can still start here. If the host can’t enter the folder either, the new session reports that error when it starts.
-            </span>
-          </Panel>
-        )
-      case "error":
-        return (
-          <Panel alert tone="error" icon={<ErrorCircleIcon />} title={`Can’t list ${here}`} actions={<RetryButton b={b} />}>
-            <span className="break-all">{b.listing.message}</span>
-          </Panel>
-        )
-      case "gone":
-        return (
-          <Panel alert tone="error" icon={<ErrorCircleIcon />} title={`${here} no longer exists`} actions={<UpButton b={b} label={`Up to ${parentName}`} />}>
-            <span>It was moved or deleted after the parent was listed.</span>
-          </Panel>
-        )
-      case "ready":
-        if (pool.length === 0 && query === "") {
-          return (
-            <Panel icon={<FolderOpenIcon />} title={`No folders inside ${here}`} actions={<UpButton b={b} label={`Up to ${parentName}`} />}>
-              <span>It may still contain files. Start here, or go back up.</span>
-            </Panel>
-          )
-        }
-        if (matches.length === 0) {
-          return (
-            <Panel
-              icon={<SearchIcon />}
-              title={`No folder named “${b.filter}” here`}
-              actions={
-                <>
-                  {hiddenMatches > 0 && (
-                    <Button variant="outline" className={RECOVERY_BTN} onClick={b.toggleHidden}>
-                      <EyeIcon className="size-4" />
-                      Include hidden folders
-                    </Button>
-                  )}
-                  <Button variant="ghost" className={`${RECOVERY_BTN} border-transparent bg-transparent hover:bg-foreground/5`} onClick={() => b.setFilter("")}>
-                    <DismissIcon className="size-4" />
-                    Clear filter
-                  </Button>
-                </>
-              }
-            >
-              {hiddenMatches > 0 && <span>{plural(hiddenMatches, "hidden folder")} here match.</span>}
-            </Panel>
-          )
-        }
-        return (
-          <ul className="m-0 list-none p-0" aria-label={`Folders in ${here}`}>
-            {matches.map((e) => (
-              <li key={e.name}>
-                <button
-                  type="button"
-                  data-folder-row
-                  title={e.name}
-                  onClick={() => goAndFocus(childPath(b.path, e.name))}
-                  className={`grid h-(--picker-row-h) w-full grid-cols-[20px_1fr_16px] items-center gap-3 rounded-sm pr-2.5 pl-3 text-left text-foreground hover:bg-grey-96 active:bg-grey-92 max-md:h-(--picker-row-h-touch) ${FOCUS} ${TRANSITION}`}
-                >
-                  <FolderIcon className="size-5 text-grey-38" />
-                  <span
-                    className={`truncate max-md:line-clamp-2 max-md:leading-[18px] max-md:break-all max-md:whitespace-normal ${e.hidden ? "text-grey-38" : ""}`}
-                  >
-                    <Highlight name={e.name} query={query} />
-                  </span>
-                  <ChevronRightIcon className="size-4 text-grey-74" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )
-    }
-  })()
 
   const drillAnim =
     b.drill === "in"
@@ -540,39 +459,6 @@ export function FolderPicker({ b, className = "" }: { b: FolderBrowser; classNam
       : b.drill === "up"
         ? "animate-in fade-in slide-in-from-left-6 duration-(--picker-drill-dur) ease-(--picker-drill-ease) motion-reduce:animate-none"
         : ""
-
-  const foot = (() => {
-    if (!ready) return null
-    if (query !== "" && matches.length > 0) {
-      return (
-        <>
-          <span>
-            Enter opens <b className="text-foreground">{matches[0].name}</b>
-          </span>
-          <span className="max-md:hidden">
-            <kbd className={KBD}>↑</kbd> <kbd className={KBD}>↓</kbd> move
-          </span>
-        </>
-      )
-    }
-    if (hiddenEntries.length === 0 || query !== "") return null
-    const names = hiddenEntries.slice(0, HIDDEN_NAMES_SHOWN).map((e) => e.name).join(", ")
-    const more = hiddenEntries.length > HIDDEN_NAMES_SHOWN ? ", …" : ""
-    return (
-      <>
-        <span className="min-w-0 truncate">
-          {showHidden ? `Showing ${plural(hiddenEntries.length, "hidden folder")}` : plural(hiddenEntries.length, "hidden folder")}
-          {!showHidden && <span className="max-md:hidden"> ({names}{more})</span>}
-        </span>
-        {!autoHidden && (
-          <Button variant="ghost" className="h-7 gap-1.5 rounded-sm px-2.5 text-caption font-semibold hover:bg-foreground/5 max-md:h-11" onClick={b.toggleHidden}>
-            {showHidden ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
-            {showHidden ? "Hide" : "Show"}
-          </Button>
-        )}
-      </>
-    )
-  })()
 
   return (
     <div className={`flex flex-col overflow-hidden rounded-md border border-grey-88 bg-card ${className}`} onKeyDown={onKeyDown}>
@@ -614,20 +500,16 @@ export function FolderPicker({ b, className = "" }: { b: FolderBrowser; classNam
         className="h-(--picker-list-h) overflow-y-auto overscroll-contain p-1 outline-none [scrollbar-width:thin] max-md:h-auto max-md:min-h-0 max-md:flex-1"
       >
         <div key={`${b.path}|${b.listing.kind}`} className={`flex min-h-full flex-col ${drillAnim}`}>
+          {b.memoryError !== null && <Notice>Cannot remember folders: {b.memoryError}</Notice>}
           {b.notice !== null && (
-            <div className="mx-1 mt-1 mb-0.5 flex items-start gap-2.5 rounded-sm bg-warning-bg px-2.5 py-2 text-caption text-grey-26 inset-ring inset-ring-warning-border" role="status">
-              <WarningIcon className="size-4 shrink-0 text-warning" />
-              <span>
-                <span className="font-mono text-foreground">{displayPath(b.notice)}</span> was moved or deleted. Opened its nearest parent instead.
-              </span>
-            </div>
+            <Notice>
+              <span className="font-mono text-foreground">{displayPath(b.notice)}</span> was moved or deleted. Opened its nearest parent instead.
+            </Notice>
           )}
-          {list}
+          <FolderList b={b} here={here} parentName={parentName} pool={pool} matches={matches} query={query} hiddenMatches={hiddenMatches} goAndFocus={goAndFocus} />
         </div>
       </div>
-      {foot !== null && (
-        <div className="flex items-center justify-between gap-2 border-t border-grey-94 py-1.5 pr-1.5 pl-3.5 text-caption text-muted-foreground">{foot}</div>
-      )}
+      <FolderFoot b={b} ready={ready} query={query} matches={matches} hiddenEntries={hiddenEntries} showHidden={showHidden} autoHidden={autoHidden} />
     </div>
   )
 }
