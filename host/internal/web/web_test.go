@@ -31,11 +31,11 @@ func newEnv(t *testing.T) *env {
 	t.Helper()
 	e := &env{t: t, now: time.Unix(1_800_000_000, 0)}
 	clock := func() time.Time { return e.now }
-	sessions, err := auth.OpenSessions(filepath.Join(t.TempDir(), "sessions.json"), sessionTTL, clock)
+	hash := auth.HashPassword("pw", []byte("0123456789abcdef"), auth.Cost{Time: 1, MemoryKiB: 64, Threads: 1})
+	sessions, err := auth.OpenSessions(filepath.Join(t.TempDir(), "sessions.json"), sessionTTL, clock, hash)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hash := auth.HashPassword("pw", []byte("0123456789abcdef"), auth.Cost{Time: 1, MemoryKiB: 64, Threads: 1})
 	e.h = web.New(web.Options{Username: "me", PasswordHash: hash, SessionTTL: sessionTTL, Sessions: sessions,
 		Limiter: auth.NewLimiter(clock),
 		API:     http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { e.apiCalls++ }),
