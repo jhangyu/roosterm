@@ -64,7 +64,7 @@ func serveConfig(path string, stdout io.Writer) error {
 	}
 	h := web.New(web.Options{
 		Username: cfg.Username, PasswordHash: cfg.PasswordHash, SessionTTL: cfg.SessionTTL,
-		Sessions: sessions, Limiter: auth.NewLimiter(time.Now),
+		Sessions: sessions, Limiter: auth.NewLimiter(time.Now), DeviceLimiter: auth.NewLimiter(time.Now),
 		API:       api.New(api.Options{Core: sup, Shell: cfg.Shell, Home: home, SwarmDir: swarm.Dir(os.Getenv, os.Getuid())}),
 		TabSocket: bridge.New(sup, cfg.PingInterval),
 	})

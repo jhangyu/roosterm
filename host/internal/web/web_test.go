@@ -35,8 +35,8 @@ func newEnv(t *testing.T) *env {
 	}
 	hash := auth.HashPassword("pw", []byte("0123456789abcdef"), auth.Cost{Time: 1, MemoryKiB: 64, Threads: 1})
 	e.h = web.New(web.Options{Username: "me", PasswordHash: hash, SessionTTL: sessionTTL, Sessions: sessions,
-		Limiter: auth.NewLimiter(clock),
-		API:     http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { e.apiCalls++ }),
+		Limiter: auth.NewLimiter(clock), DeviceLimiter: auth.NewLimiter(clock),
+		API: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { e.apiCalls++ }),
 		TabSocket: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			e.wsCalls++
 			if r.PathValue("id") != "t1" {
@@ -116,8 +116,8 @@ func TestLoginSetsCookieAttributes(t *testing.T) {
 			t.Errorf("Set-Cookie %q: missing %q", sc, want)
 		}
 	}
-	if c := rec.Result().Cookies(); len(c) != 1 || len(c[0].Value) != 43 {
-		t.Fatalf("session cookie: expected one 43-char token, got %v", c)
+	if c := rec.Result().Cookies(); len(c) != 2 || len(c[0].Value) != 43 || c[1].Name != "roosterm_device" {
+		t.Fatalf("cookies: expected a 43-char session token and the device cookie, got %v", c)
 	}
 }
 
@@ -213,5 +213,54 @@ func TestLogoutClearsSession(t *testing.T) {
 	}
 	if rec := e.do("GET", "/api/tabs", "", c, nil); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("after logout: expected 401, got %d", rec.Code)
+	}
+}
+
+func (e *env) loginWith(user, pass string, cookie *http.Cookie) *httptest.ResponseRecorder {
+	b, err := json.Marshal(map[string]string{"username": user, "password": pass})
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return e.do("POST", "/login", string(b), cookie, nil)
+}
+
+func TestLoginLockoutSparesKnownDevice(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	var device *http.Cookie // literal name: compiles (and stays nil) on code without the device cookie
+	for _, c := range e.loginWith("me", "pw", nil).Result().Cookies() {
+		if c.Name == "roosterm_device" {
+			device = c
+		}
+	}
+	for i := 0; i < auth.MaxFailures; i++ {
+		if rec := e.loginWith("me", "nope", nil); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("anonymous failure %d: expected 401, got %d", i+1, rec.Code)
+		}
+	}
+	if rec := e.loginWith("me", "pw", nil); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("anonymous after lockout: expected 429, got %d", rec.Code)
+	}
+	forged := &http.Cookie{Name: "roosterm_device", Value: strings.Repeat("0", 64)}
+	if rec := e.loginWith("me", "pw", forged); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("forged device cookie: expected 429, got %d", rec.Code)
+	}
+	if rec := e.loginWith("me", "pw", device); rec.Code != http.StatusNoContent {
+		t.Fatalf("owner with device cookie while anonymous bucket locked: expected 204, got %d", rec.Code)
+	}
+	for i := 0; i < auth.MaxFailures; i++ {
+		if rec := e.loginWith("me", "nope", device); rec.Code != http.StatusUnauthorized {
+			t.Fatalf("device failure %d: expected 401, got %d", i+1, rec.Code)
+		}
+	}
+	if rec := e.loginWith("me", "pw", device); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("device bucket after lockout: expected 429, got %d", rec.Code)
+	}
+	e.now = e.now.Add(auth.Lockout)
+	if rec := e.loginWith("me", "pw", device); rec.Code != http.StatusNoContent {
+		t.Fatalf("device after lockout: expected 204, got %d", rec.Code)
+	}
+	if device.Path != "/login" || !device.HttpOnly || !device.Secure || device.SameSite != http.SameSiteStrictMode || device.MaxAge <= 0 {
+		t.Fatalf("device cookie attributes: expected Path=/login HttpOnly Secure SameSite=Strict MaxAge>0, got %+v", device)
 	}
 }

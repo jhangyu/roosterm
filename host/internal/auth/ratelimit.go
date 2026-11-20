@@ -10,7 +10,7 @@ const (
 	Lockout     = 60 * time.Second
 )
 
-// Limiter is the global login limiter (single user behind one proxy IP).
+// Limiter is one login-failure bucket; web keeps one for anonymous clients and one for known devices.
 type Limiter struct {
 	mu          sync.Mutex
 	now         Clock
