@@ -24,7 +24,7 @@ Acceptance criteria (all run from repo root unless stated; each must hold on mai
 8. `grep -rn "IsAttachArgv\|\"-L\"" host web/src` → empty; `grep -c '"swarm"' docs/api.md` ≥ 1.
 9. `grep -rnE 'func badRequest|func dirError|func \(e \*Error\) Error|MaxBody|DefaultSocket|dirExists|HashPasswordCost|firstPID' host --include='*.go'` → empty.
 10. `grep -rnE 'Status: +http\.Status(BadRequest|NotFound|Unauthorized|InternalServerError)' host/internal --include='*.go' | grep -v _test.go | grep -v internal/apierr/apierr.go` → empty.
-11. `grep -rn '".tmp"' host/internal --include='*.go'` → only host/internal/atomicfile/atomicfile.go.
+11. `grep -rnF '".tmp"' host/internal --include='*.go' | grep -v hctest/` → only host/internal/atomicfile/atomicfile.go (amended by user 2026-11-20: fixed-string match, test fake socket excluded).
 12. `grep -rlw -E 'ScrollArea|CardHeader|AlertDialogMedia|AlertTitle|DialogHeader|ChevronDownIcon|readPhoneMetrics|showCloseButton' web/src` → empty; `test ! -e web/public/.gitkeep && echo OK` → `OK`.
 13. `grep -rn "console.warn" web/src` → empty; `grep -rn "status === [0-9]" web/src` → empty.
 14. `grep -c "CLAUDE_PROGRAM = " web/src/workspace/*.ts*` summed → 1; `grep -rn "getComputedStyle" web/src` → exactly 1 hit (lib/terminal-theme.ts).
