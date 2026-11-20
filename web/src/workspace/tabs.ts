@@ -50,10 +50,10 @@ export const tabText = (tab: Tab): string => {
   return summary === "" ? folder : `${folder} · ${summary}`
 }
 
-// Live title from the attached terminal's title-change event.
-export const withTitle = (ws: Workspace, id: string, title: string): Workspace => ({
+// Replace one tab by id with change(tab).
+export const updateTab = (ws: Workspace, id: string, change: (t: Tab) => Tab): Workspace => ({
   ...ws,
-  tabs: ws.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
+  tabs: ws.tabs.map((t) => (t.id === id ? change(t) : t)),
 })
 
 // Remove one tab by id; if it was active, focus its right neighbour, else its left one.

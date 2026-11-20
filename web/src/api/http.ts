@@ -1,4 +1,4 @@
-import { ApiError, parseTabEnd, type CreateRequest, type Tab } from "./types"
+import { ApiError, HTTP_STATUS, parseTabEnd, type CreateRequest, type Tab } from "./types"
 
 // Backend error body: {"error":{op,tab?,message,kind,hint?}}. Anything else (e.g. a proxy page) is shown raw.
 function errorFromBody(op: string, status: number, text: string, tabId: string | undefined, retryAfter: string | null): ApiError {
@@ -29,7 +29,7 @@ async function call(op: string, method: string, path: string, body?: unknown, ta
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch (e) {
-    throw new ApiError(op, 0, null, `network error: ${e instanceof Error ? e.message : String(e)}`, tabId)
+    throw new ApiError(op, HTTP_STATUS.networkFailure, null, `network error: ${e instanceof Error ? e.message : String(e)}`, tabId)
   }
   if (!res.ok) throw errorFromBody(op, res.status, await res.text(), tabId, res.headers.get("Retry-After"))
   return res

@@ -26,7 +26,6 @@ export class ApiError extends Error {
   readonly status: number
   readonly kind: string | null
   readonly detail: string
-  readonly tabId: string | undefined
   readonly retryAfter: string | null
 
   constructor(op: string, status: number, kind: string | null, detail: string, tabId?: string, retryAfter: string | null = null) {
@@ -35,7 +34,6 @@ export class ApiError extends Error {
     this.status = status
     this.kind = kind
     this.detail = detail
-    this.tabId = tabId
     this.retryAfter = retryAfter
   }
 }

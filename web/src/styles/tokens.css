@@ -7,14 +7,13 @@
   --brand-60: #0f548c;
   --brand-70: #115ea3;
   --brand-80: #0f6cbd;
-  --brand-140: #b4d6fa;
   --brand-150: #cfe4fa;
   --brand-160: #ebf3fc;
 
   /* Fluent 2 neutrals (global grey) */
   --grey-14: #242424; --grey-26: #424242; --grey-38: #616161;
   --grey-74: #bdbdbd; --grey-82: #d1d1d1; --grey-88: #e0e0e0;
-  --grey-90: #e6e6e6; --grey-92: #ebebeb; --grey-94: #f0f0f0;
+  --grey-92: #ebebeb; --grey-94: #f0f0f0;
   --grey-96: #f5f5f5; --grey-98: #fafafa;
 
   /* shadcn semantic colors */
@@ -59,7 +58,6 @@
   --shape-lg: 16px;
   --shape-xl: 28px;
   --shape-full: 9999px;
-  --radius: var(--shape-md);
 
   /* Fluent 2 elevation */
   --elev-2: 0 0 2px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.14);
