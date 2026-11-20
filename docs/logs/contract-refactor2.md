@@ -1,7 +1,7 @@
 # Contract: refactor campaign 2 (2026-11-21)
 
 Frozen by user approval 2026-11-21. Base HEAD 1f840e8. Only the user may change this contract.
-Plan and designs: scratch/refactor2/plan.md and the four architect files it names (scratch, deleted at signoff).
+Plan and designs lived in the campaign's scratch directory, deleted at signoff; the result and evidence are in docs/logs/2026-11-21-refactor2.md.
 
 End state: every item of the two rounds in the plan, with the user decisions below, is implemented as a behaviour-preserving refactor or the stated bug fix, and both end-of-round gates pass on main.
 
