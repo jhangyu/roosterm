@@ -31,10 +31,8 @@ ThemeData buildTheme() {
     borderSide: const BorderSide(color: input),
   );
   return ThemeData(
-    useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: background,
-    fontFamily: 'Roboto',
     appBarTheme: const AppBarTheme(
       backgroundColor: background,
       foregroundColor: foreground,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'fluent_icon.dart';
 import 'host_page.dart';
 import 'hosts.dart';
+import 'notice.dart';
 import 'tokens.dart';
 
 class HostListPage extends StatefulWidget {
@@ -27,7 +28,15 @@ class _HostListPageState extends State<HostListPage> {
   }
 
   Future<void> _replace(List<Host> hosts) async {
-    await _store.save(hosts);
+    try {
+      await _store.save(hosts);
+    } on Exception catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not save the host list: $e')));
+      return;
+    }
+    if (!mounted) return;
     setState(() => _hosts = hosts);
   }
 
@@ -74,7 +83,7 @@ class _HostListPageState extends State<HostListPage> {
   Widget build(BuildContext context) {
     final Widget body;
     if (_loadError != null) {
-      body = _Notice(
+      body = Notice(
         icon: 'warning',
         iconColor: destructive,
         title: 'Could not read the host list',
@@ -83,7 +92,7 @@ class _HostListPageState extends State<HostListPage> {
     } else if (_hosts == null) {
       body = const Center(child: Text('Loading…', style: TextStyle(color: mutedForeground)));
     } else if (_hosts!.isEmpty) {
-      body = const _Notice(
+      body = const Notice(
         icon: 'server',
         iconColor: mutedForeground,
         title: 'No hosts yet',
@@ -122,29 +131,6 @@ class _HostListPageState extends State<HostListPage> {
             ),
     );
   }
-}
-
-class _Notice extends StatelessWidget {
-  const _Notice({required this.icon, required this.iconColor, required this.title, required this.detail});
-
-  final String icon;
-  final Color iconColor;
-  final String title;
-  final String detail;
-
-  @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            FluentIcon(icon, color: iconColor, size: 32),
-            const SizedBox(height: 12),
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(detail, textAlign: TextAlign.center, style: const TextStyle(color: mutedForeground)),
-          ]),
-        ),
-      );
 }
 
 class _HostTile extends StatelessWidget {

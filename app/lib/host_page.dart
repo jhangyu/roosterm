@@ -4,6 +4,7 @@ import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import 'fluent_icon.dart';
 import 'hosts.dart';
+import 'notice.dart';
 import 'tokens.dart';
 
 class HostPage extends StatefulWidget {
@@ -66,26 +67,15 @@ class _HostPageState extends State<HostPage> {
         body: SafeArea(
           child: error == null
               ? _webView()
-              : Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      const FluentIcon('warning', color: destructive, size: 32),
-                      const SizedBox(height: 12),
-                      Text('Could not load ${widget.host.url}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 4),
-                      Text('${error.errorCode}: ${error.description}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: mutedForeground)),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: _reload,
-                        icon: const FluentIcon('arrow_clockwise', color: Colors.white),
-                        label: const Text('Reload'),
-                      ),
-                    ]),
+              : Notice(
+                  icon: 'warning',
+                  iconColor: destructive,
+                  title: 'Could not load ${widget.host.url}',
+                  detail: '${error.errorCode}: ${error.description}',
+                  action: FilledButton.icon(
+                    onPressed: _reload,
+                    icon: const FluentIcon('arrow_clockwise', color: Colors.white),
+                    label: const Text('Reload'),
                   ),
                 ),
         ),
