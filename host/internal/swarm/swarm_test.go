@@ -1,4 +1,4 @@
-package swarm_test
+package swarm
 
 import (
 	"net"
@@ -6,32 +6,21 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
-
-	"roosterm/host/internal/swarm"
 )
 
-func TestMemberTargetPicksWindowWithMostClaudePanes(t *testing.T) {
+func TestAttachArgv(t *testing.T) {
 	t.Parallel()
-	got, ok := swarm.MemberTarget("s:0 zsh\ns:1 claude.exe\ns:15 zsh\ns:15 claude.exe\ns:15 claude.exe\n")
-	if !ok || got != "s:15" {
-		t.Fatalf("expected s:15, got %q ok=%v", got, ok)
-	}
-	if got, ok := swarm.MemberTarget("s:0 zsh\n"); ok {
-		t.Fatalf("expected no target without claude panes, got %q", got)
-	}
-}
-
-func TestAttachArgvUsesFullSocketPath(t *testing.T) {
-	bin := t.TempDir()
-	stub := "#!/bin/sh\necho 's:3 claude.exe'\n"
-	if err := os.WriteFile(filepath.Join(bin, "tmux"), []byte(stub), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
-	got, err := swarm.AttachArgv("/d/tmux-501", "claude-swarm-7")
-	want := []string{"tmux", "-S", "/d/tmux-501/claude-swarm-7", "a", "-t", "s:3"}
-	if err != nil || !slices.Equal(got, want) {
-		t.Fatalf("expected %v, got %v err=%v", want, got, err)
+	const sock = "/d/tmux-501/claude-swarm-7"
+	for _, tc := range []struct {
+		panes string
+		want  []string
+	}{
+		{"s:0 zsh\ns:1 claude.exe\ns:15 zsh\ns:15 claude.exe\ns:15 claude.exe\n", []string{"tmux", "-S", sock, "a", "-t", "s:15"}},
+		{"s:0 zsh\n", []string{"tmux", "-S", sock, "a"}},
+	} {
+		if got := attachArgv(sock, tc.panes); !slices.Equal(got, tc.want) {
+			t.Errorf("attachArgv(%q): expected %v, got %v", tc.panes, tc.want, got)
+		}
 	}
 }
 
@@ -52,7 +41,7 @@ func TestListOnlyClaudeSwarmSockets(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "claude-swarm-file"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := swarm.List(dir)
+	got, err := List(t.Context(), dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +73,7 @@ func TestListRemovesDeadSockets(t *testing.T) {
 	if err := os.WriteFile(plain, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := swarm.List(dir)
+	got, err := List(t.Context(), dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +90,7 @@ func TestListRemovesDeadSockets(t *testing.T) {
 
 func TestListMissingDir(t *testing.T) {
 	t.Parallel()
-	got, err := swarm.List(filepath.Join(t.TempDir(), "absent"))
+	got, err := List(t.Context(), filepath.Join(t.TempDir(), "absent"))
 	if err != nil || got == nil || len(got) != 0 {
 		t.Fatalf("List missing dir: expected [], nil; got %#v, %v", got, err)
 	}
@@ -111,11 +100,11 @@ func TestDir(t *testing.T) {
 	t.Parallel()
 	env := map[string]string{}
 	getenv := func(k string) string { return env[k] }
-	if got := swarm.Dir(getenv, 501); got != "/tmp/tmux-501" {
+	if got := Dir(getenv, 501); got != "/tmp/tmux-501" {
 		t.Fatalf("Dir without TMUX_TMPDIR: got %s", got)
 	}
 	env["TMUX_TMPDIR"] = "/var/tmux"
-	if got := swarm.Dir(getenv, 501); got != "/var/tmux/tmux-501" {
+	if got := Dir(getenv, 501); got != "/var/tmux/tmux-501" {
 		t.Fatalf("Dir with TMUX_TMPDIR: got %s", got)
 	}
 }

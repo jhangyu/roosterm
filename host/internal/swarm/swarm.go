@@ -3,6 +3,7 @@
 package swarm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -28,7 +29,7 @@ func Dir(getenv func(string) string, uid int) string {
 // List returns the names of live Unix sockets in dir that start with Prefix, sorted.
 // A socket whose connect is refused belongs to a dead tmux server: its file is removed and not listed.
 // A missing dir means no tmux server has run: empty list, no error.
-func List(dir string) ([]string, error) {
+func List(ctx context.Context, dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir) // sorted by name
 	if errors.Is(err, fs.ErrNotExist) {
 		return []string{}, nil
@@ -39,7 +40,7 @@ func List(dir string) ([]string, error) {
 	names := []string{}
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), Prefix) && e.Type()&fs.ModeSocket != 0 {
-			live, err := probe(filepath.Join(dir, e.Name()))
+			live, err := probe(ctx, filepath.Join(dir, e.Name()))
 			if err != nil {
 				return nil, err
 			}
@@ -53,8 +54,8 @@ func List(dir string) ([]string, error) {
 
 // probe reports whether a server accepts connections on the socket at path.
 // ECONNREFUSED means dead: the stale file is removed. Anything else unexpected is an error.
-func probe(path string) (bool, error) {
-	c, err := net.Dial("unix", path)
+func probe(ctx context.Context, path string) (bool, error) {
+	c, err := (&net.Dialer{}).DialContext(ctx, "unix", path)
 	if err == nil {
 		c.Close()
 		return true, nil
@@ -68,18 +69,21 @@ func probe(path string) (bool, error) {
 	return false, nil
 }
 
-// ClaudeProgram is the pane_current_command of a Claude member pane.
-const ClaudeProgram = "claude.exe"
+// claudeProgram is the pane_current_command of a Claude member pane.
+const claudeProgram = "claude.exe"
 
-// MemberTarget picks the "session:window" holding the most Claude member panes from
-// `tmux list-panes -a -F "#{session_name}:#{window_index} #{pane_current_command}"` output.
-// Ties go to the first window listed. ok is false when no pane runs ClaudeProgram.
-func MemberTarget(listPanes string) (target string, ok bool) {
+// listPanesFormat makes `tmux list-panes -a` print one "session:window command" line per pane.
+const listPanesFormat = "#{session_name}:#{window_index} #{pane_current_command}"
+
+// memberTarget picks the "session:window" holding the most Claude member panes from
+// `tmux list-panes -a -F listPanesFormat` output.
+// Ties go to the first window listed. ok is false when no pane runs claudeProgram.
+func memberTarget(listPanes string) (target string, ok bool) {
 	counts := map[string]int{}
 	order := []string{}
 	for _, line := range strings.Split(listPanes, "\n") {
 		window, command, found := strings.Cut(line, " ")
-		if !found || command != ClaudeProgram {
+		if !found || command != claudeProgram {
 			continue
 		}
 		if counts[window] == 0 {
@@ -97,17 +101,22 @@ func MemberTarget(listPanes string) (target string, ok bool) {
 
 // AttachArgv is the command that attaches to the swarm socket name, targeting the window with the member panes
 // (a bare attach shows the session's active window, which may be an idle shell). No member pane: the bare attach.
-func AttachArgv(dir, name string) ([]string, error) {
-	out, err := exec.Command("tmux", "-S", filepath.Join(dir, name), "list-panes", "-a",
-		"-F", "#{session_name}:#{window_index} #{pane_current_command}").Output()
+func AttachArgv(ctx context.Context, dir, name string) ([]string, error) {
+	sock := filepath.Join(dir, name)
+	out, err := exec.CommandContext(ctx, "tmux", "-S", sock, "list-panes", "-a", "-F", listPanesFormat).Output()
 	if err != nil {
 		return nil, fmt.Errorf("swarm list-panes %s: expected tmux exit 0, got %w", name, err)
 	}
-	argv := []string{"tmux", "-S", filepath.Join(dir, name), "a"}
-	if target, ok := MemberTarget(string(out)); ok {
+	return attachArgv(sock, string(out)), nil
+}
+
+// attachArgv builds the attach command for socket path sock from `tmux list-panes` output.
+func attachArgv(sock, listPanes string) []string {
+	argv := []string{"tmux", "-S", sock, "a"}
+	if target, ok := memberTarget(listPanes); ok {
 		argv = append(argv, "-t", target)
 	}
-	return argv, nil
+	return argv
 }
 
 // IsName reports whether name is a bare swarm socket name (Prefix, no path separators).

@@ -94,10 +94,7 @@ func relCwd(home, cwd string) string {
 	if !inside(home, cwd) {
 		return cwd
 	}
-	if r, _ := filepath.Rel(home, cwd); r != "." {
-		return r
-	}
-	return ""
+	return strings.TrimPrefix(cwd[len(home):], string(filepath.Separator))
 }
 
 func (s *server) listDirs(w http.ResponseWriter, r *http.Request) *apierr.Error {

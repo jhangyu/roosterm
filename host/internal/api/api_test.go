@@ -117,6 +117,7 @@ func TestCreateTabSwarmBadRequest(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	for _, body := range []string{
+		`{"swarm":""}`,
 		`{"swarm":"x"}`,
 		`{"swarm":"claude-swarm-1/../y"}`,
 		`{"swarm":"claude-swarm-1","command":["sh"]}`,

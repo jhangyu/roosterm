@@ -38,6 +38,8 @@ def main() -> None:
         name = f"roosterm-{parts[0]}-{parts[1]}"
     step(["npm", "ci", "--prefix", str(WEB)], ROOT)
     step(["npm", "run", "build", "--prefix", str(WEB)], ROOT)
+    # vite emptyOutDir deletes the tracked placeholder; go:embed all:dist needs it on a fresh clone.
+    (HOST / "internal" / "web" / "dist" / ".gitkeep").touch()
     BUILD.mkdir(exist_ok=True)
     out = BUILD / name
     step(["go", "build", "-trimpath", "-o", str(out), "./cmd/roosterm"], HOST, env)

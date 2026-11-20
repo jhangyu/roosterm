@@ -80,7 +80,7 @@ type createRequest struct {
 	Command []string `json:"command"`
 	Label   *string  `json:"label"`
 	Cwd     string   `json:"cwd"`   // relative to home
-	Swarm   string   `json:"swarm"` // claude-swarm-* socket name; excludes command and cwd
+	Swarm   *string  `json:"swarm"` // claude-swarm-* socket name; excludes command and cwd
 }
 
 func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error {
@@ -90,15 +90,15 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error
 		return e
 	}
 	argv := []string{s.o.Shell, "-l"}
-	if req.Swarm != "" {
+	if req.Swarm != nil {
 		if req.Command != nil || req.Cwd != "" {
 			return apierr.BadRequest(op, "", `swarm: expected no "command" or "cwd" together with "swarm", got both`)
 		}
-		if !swarm.IsName(req.Swarm) {
-			return apierr.BadRequest(op, "", fmt.Sprintf(`swarm: expected a socket name starting with "claude-swarm-" and without "/", got %q`, req.Swarm))
+		if !swarm.IsName(*req.Swarm) {
+			return apierr.BadRequest(op, "", fmt.Sprintf(`swarm: expected a socket name starting with %q and without "/", got %q`, swarm.Prefix, *req.Swarm))
 		}
 		var err error
-		if argv, err = swarm.AttachArgv(s.o.SwarmDir, req.Swarm); err != nil {
+		if argv, err = swarm.AttachArgv(r.Context(), s.o.SwarmDir, *req.Swarm); err != nil {
 			return apierr.Internal(op, "", err.Error())
 		}
 	} else if req.Command != nil {
@@ -120,8 +120,8 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error
 	if cwd != home {
 		label = filepath.Base(cwd)
 	}
-	if req.Swarm != "" {
-		label = req.Swarm
+	if req.Swarm != nil {
+		label = *req.Swarm
 	}
 	if req.Label != nil {
 		label = *req.Label

@@ -13,7 +13,7 @@ from typing import NoReturn
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 HOST = ROOT / "host"
-SUITE_BUDGET_S = 40.0  # whole script wall time (contract criterion 2)
+SUITE_BUDGET_S = 40.0  # whole script wall time; project test policy: <= 40 s
 TEST_BUDGET_S = 1.0  # any single test
 SLOWEST_SHOWN = 5
 GO_TEST_TIMEOUT = "30s"  # go's own hang guard: dumps goroutines before the budget kill
