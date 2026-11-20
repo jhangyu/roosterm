@@ -165,34 +165,36 @@ func TestLimiterLockout(t *testing.T) {
 	t.Parallel()
 	clk := newClock()
 	l := auth.NewLimiter(clk.now)
-	for i := 0; i < auth.MaxFailures-1; i++ {
-		l.Fail()
+	// MaxFailures attempts in flight (none completed): the next one must already be locked out.
+	for i := 0; i < auth.MaxFailures; i++ {
+		if _, ok := l.Attempt(); !ok {
+			t.Fatalf("in-flight attempt %d: expected allowed", i+1)
+		}
 	}
-	if _, ok := l.Allow(); !ok {
-		t.Fatal("after 4 failures: expected allowed")
-	}
-	l.Fail()
-	if d, ok := l.Allow(); ok || d != auth.Lockout {
-		t.Fatalf("after 5 failures: expected (60s, false), got (%v, %v)", d, ok)
+	if d, ok := l.Attempt(); ok || d != auth.Lockout {
+		t.Fatalf("after %d in-flight attempts: expected (60s, false), got (%v, %v)", auth.MaxFailures, d, ok)
 	}
 	clk.t = clk.t.Add(30 * time.Second)
-	if d, ok := l.Allow(); ok || d != 30*time.Second {
+	if d, ok := l.Attempt(); ok || d != 30*time.Second {
 		t.Fatalf("30s into lockout: expected (30s, false), got (%v, %v)", d, ok)
 	}
 	clk.t = clk.t.Add(30 * time.Second)
-	if _, ok := l.Allow(); !ok {
-		t.Fatal("after lockout: expected allowed")
+	for i := 0; i < auth.MaxFailures; i++ {
+		if _, ok := l.Attempt(); !ok {
+			t.Fatalf("attempt %d after lockout: expected allowed (count reset)", i+1)
+		}
 	}
-	l.Fail()
-	if _, ok := l.Allow(); !ok {
-		t.Fatal("one failure after lockout: expected allowed (count reset)")
+	if _, ok := l.Attempt(); ok {
+		t.Fatal("after lockout expiry: expected a second lockout after MaxFailures attempts")
 	}
-	for i := 0; i < auth.MaxFailures-2; i++ {
-		l.Fail()
+	clk.t = clk.t.Add(auth.Lockout)
+	for i := 0; i < auth.MaxFailures-1; i++ {
+		l.Attempt()
 	}
 	l.Succeed()
-	l.Fail()
-	if _, ok := l.Allow(); !ok {
-		t.Fatal("after success: expected count reset")
+	for i := 0; i < auth.MaxFailures; i++ {
+		if _, ok := l.Attempt(); !ok {
+			t.Fatalf("attempt %d after success: expected allowed (count reset)", i+1)
+		}
 	}
 }

@@ -18,18 +18,18 @@ type loginRequest struct {
 
 func (s *server) login(w http.ResponseWriter, r *http.Request) *apierr.Error {
 	const op = "login"
-	if retry, ok := s.o.Limiter.Allow(); !ok {
-		secs := max(1, int(math.Ceil(retry.Seconds())))
-		w.Header().Set("Retry-After", strconv.Itoa(secs))
-		return &apierr.Error{Status: http.StatusTooManyRequests, Op: op, Kind: apierr.KindTooManyAttempts,
-			Message: fmt.Sprintf("too many failed logins: retry in %d s", secs)}
-	}
 	var req loginRequest
 	if e := apierr.DecodeJSON(w, r, op, &req); e != nil {
 		return e
 	}
 	if req.Username == "" || req.Password == "" {
 		return apierr.BadRequest(op, "", "username, password: expected non-empty strings, got an empty value")
+	}
+	if retry, ok := s.o.Limiter.Attempt(); !ok {
+		secs := max(1, int(math.Ceil(retry.Seconds())))
+		w.Header().Set("Retry-After", strconv.Itoa(secs))
+		return &apierr.Error{Status: http.StatusTooManyRequests, Op: op, Kind: apierr.KindTooManyAttempts,
+			Message: fmt.Sprintf("too many failed logins: retry in %d s", secs)}
 	}
 	// Both checks always run (no early exit on a wrong username).
 	userOK := subtle.ConstantTimeCompare([]byte(req.Username), []byte(s.o.Username)) == 1
@@ -38,7 +38,6 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) *apierr.Error {
 		return apierr.Internal(op, "", err.Error())
 	}
 	if !userOK || !passOK {
-		s.o.Limiter.Fail()
 		return apierr.Unauthorized(op, "wrong username or password")
 	}
 	s.o.Limiter.Succeed()

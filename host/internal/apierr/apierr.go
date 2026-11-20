@@ -57,13 +57,9 @@ func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Write sends e as {"error": e} with status e.Status.
 func Write(w http.ResponseWriter, e *Error) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(e.Status)
-	if err := json.NewEncoder(w).Encode(struct {
+	WriteJSON(w, e.Status, struct {
 		Error *Error `json:"error"`
-	}{e}); err != nil {
-		log.Printf("write error body for %s: %v", e.Op, err)
-	}
+	}{e})
 }
 
 // DecodeJSON reads exactly one JSON object with only known fields into v.

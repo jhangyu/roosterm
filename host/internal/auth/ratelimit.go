@@ -20,8 +20,10 @@ type Limiter struct {
 
 func NewLimiter(now Clock) *Limiter { return &Limiter{now: now} }
 
-// Allow reports whether a login attempt may be checked; when locked it returns the time left.
-func (l *Limiter) Allow() (retryAfter time.Duration, ok bool) {
+// Attempt reserves one failed-attempt slot before the password is checked; Succeed releases all.
+// In-flight attempts count, so concurrent requests cannot exceed MaxFailures per Lockout window.
+// When locked it returns the time left.
+func (l *Limiter) Attempt() (retryAfter time.Duration, ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := l.now()
@@ -32,16 +34,11 @@ func (l *Limiter) Allow() (retryAfter time.Duration, ok bool) {
 		l.failures = 0
 		l.lockedUntil = time.Time{}
 	}
-	return 0, true
-}
-
-func (l *Limiter) Fail() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	l.failures++
 	if l.failures >= MaxFailures {
-		l.lockedUntil = l.now().Add(Lockout)
+		l.lockedUntil = now.Add(Lockout)
 	}
+	return 0, true
 }
 
 func (l *Limiter) Succeed() {
