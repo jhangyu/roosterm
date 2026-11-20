@@ -26,8 +26,8 @@ export const CLAUDE_COMMAND = [CLAUDE_PROGRAM]
 // a renamed swarm tab is treated as a shell. Add a command field to Tab if that matters.
 export const isSwarm = (tab: Tab) => tab.label.startsWith("claude-swarm-")
 
-// Swarm attach request (docs/api.md: POST /api/tabs).
-export const swarmTab = (name: string): CreateRequest => ({ command: ["tmux", "-L", name, "a"], label: name })
+// Swarm tab request (docs/api.md: POST /api/tabs); the host labels it with the socket name.
+export const swarmTab = (name: string): CreateRequest => ({ swarm: name })
 
 // Same kind, folder and label as the given tab: swarm => re-attach to its socket; Claude Code => `claude` in the same
 // folder; shell => server default shell in the same folder. The caller restores `renamed` (create cannot set it).

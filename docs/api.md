@@ -56,7 +56,7 @@ hc-originated `message` = `<hc method>[ <tab>]: <hc message>`.
 | `POST /login` | none | `{"username":string,"password":string}` (both non-empty) | `204`, `Set-Cookie` |
 | `POST /logout` | cookie | none | `204`, clearing `Set-Cookie`; session removed from file |
 | `GET /api/tabs` | cookie | none | `200` `Tab[]`, ordered by creation time ascending |
-| `POST /api/tabs` | cookie | `{"command"?: string[], "label"?: string, "cwd"?: string}` (`cwd` relative to home) | `201` `Tab` |
+| `POST /api/tabs` | cookie | `{"command"?: string[], "label"?: string, "cwd"?: string, "swarm"?: string}` (`cwd` relative to home; `swarm` excludes `command` and `cwd`) | `201` `Tab` |
 | `PATCH /api/tabs/{id}` | cookie | `{"label"?: string, "hidden"?: boolean}`, at least one (op `tab.update`; `label` sets `renamed`) | `200` `Tab` |
 | `DELETE /api/tabs/{id}` | cookie | none | `204` |
 | `GET /api/dirs?path=<rel>` | cookie | none | `200` `{"path": string, "entries": [{"name": string, "hidden": boolean}]}` |
@@ -82,7 +82,8 @@ Session check = `GET /api/tabs` (401 ⇒ show login). There is no whoami endpoin
 ### `POST /api/tabs`
 - `command` omitted ⇒ argv `[config.shell, "-l"]`. Present ⇒ non-empty array of non-empty strings, used verbatim as argv.
 - `cwd` omitted or `""` ⇒ home. Otherwise validated exactly like `GET /api/dirs` `path` (relative, no `..`, resolves inside home, must be a directory). The resolved directory is the hc cwd.
-- `label` omitted ⇒ `"~"` when the resolved cwd is home, else the base name of the resolved cwd. Label: 1–64 characters, no control characters (400 otherwise).
+- `swarm` = a live socket name from `GET /api/swarms`. It excludes `command` and `cwd` (400 `swarm: expected no "command" or "cwd" together with "swarm", got both`). A name not starting with `claude-swarm-` or containing `/` gives 400 (`swarm: expected a socket name starting with "claude-swarm-" and without "/", got "<name>"`). The host attaches with `tmux -S <socket dir>/<name> a [-t <window with most claude panes>]`; a well-formed name with no live socket gives 500.
+- `label` omitted ⇒ the swarm name for a swarm tab, else `"~"` when the resolved cwd is home, else the base name of the resolved cwd. Label: 1–64 characters, no control characters (400 otherwise).
 - hc call: `terminal.run {argv, cwd, size: {cols:80, rows:24}, labels: {"roosterm":"tab","roosterm.name":label}, no_parent: true}`. The first attach resizes it.
 
 ### `PATCH /api/tabs/{id}`
