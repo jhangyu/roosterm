@@ -37,7 +37,7 @@ export type FolderBrowser = {
   toggleHidden: () => void
   // Store the current folder (and the hidden-folder toggle) as this device's last used folder.
   // Returns the failure reason when storage fails (the caller keeps the dialog open so the notice is seen);
-  // while memoryError is set the save is skipped, so the next call succeeds.
+  // after a save failure the next call skips the save, so it succeeds. A load failure does not skip: the next save overwrites it.
   remember: () => string | null
 }
 
@@ -48,6 +48,7 @@ export function useFolderBrowser(open: boolean, onUnauthorized: () => void): Fol
   const [notice, setNotice] = useState<string | null>(null)
   const [memoryError, setMemoryError] = useState<string | null>(null)
   const [memory, setMemory] = useState<FolderMemory>({ recent: [], showHidden: false })
+  const saveFailed = useRef(false)
   const [filter, setFilter] = useState("")
   // Only the latest listing request may update the picker.
   const seq = useRef(0)
@@ -94,6 +95,7 @@ export function useFolderBrowser(open: boolean, onUnauthorized: () => void): Fol
   useEffect(() => {
     if (!open) return
     let remembered: FolderMemory = { recent: [], showHidden: false }
+    saveFailed.current = false
     try {
       remembered = loadMemory()
       setMemoryError(null)
@@ -119,12 +121,14 @@ export function useFolderBrowser(open: boolean, onUnauthorized: () => void): Fol
     void load(next, segments(next).length >= segments(path).length ? "in" : "up", false)
   }
   const remember = () => {
-    if (memoryError !== null) return null
+    if (saveFailed.current) return null
     try {
       saveMemory({ recent: withRecent(memory.recent, path), showHidden: memory.showHidden })
+      setMemoryError(null)
       return null
     } catch (e) {
       const message = reason(e)
+      saveFailed.current = true
       setMemoryError(message)
       return message
     }

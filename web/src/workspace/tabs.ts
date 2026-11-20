@@ -19,7 +19,7 @@ export function applyListing(ws: Workspace, listed: Tab[]): Workspace {
 }
 
 // Claude Code runs `claude` in the chosen folder (contract: client sends command ["claude"]; host reports program "claude").
-export const CLAUDE_PROGRAM = "claude"
+const CLAUDE_PROGRAM = "claude"
 export const CLAUDE_COMMAND = [CLAUDE_PROGRAM]
 
 // ponytail: the API's Tab has no command, so a swarm tab is recognised by its socket-name label (as created by the New-session dialog);
