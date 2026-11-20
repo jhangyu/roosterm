@@ -1,4 +1,4 @@
-// Mockup 3 control recipes (docs/mockups/3-calm-surfaces.html "Controls"), layered over shadcn Button/Input/Badge.
+// Mockup 3 control recipes (docs/mockups/3-calm-surfaces.html "Controls"), layered over shadcn Button/Input.
 
 // .btn: 36px high, 0 16px, corner-small, 600 body text, 1px input border on card.
 export const BTN =
@@ -20,7 +20,8 @@ export const FIELD_INPUT =
 export const FIELD_LABEL = "text-body leading-(--lh-body) font-semibold"
 
 // .badge base + .run / .idle
-export const BADGE = "h-[22px] gap-1.5 rounded-full border-0 px-2.5 text-caption font-semibold leading-none"
+export const BADGE =
+  "inline-flex h-[22px] w-fit shrink-0 items-center justify-center gap-1.5 overflow-hidden whitespace-nowrap rounded-full px-2.5 py-0.5 text-caption font-semibold leading-none"
 export const BADGE_RUN = "bg-success-bg text-success inset-ring inset-ring-success-border"
 export const BADGE_IDLE = "bg-grey-96 text-grey-38 inset-ring inset-ring-grey-88"
 

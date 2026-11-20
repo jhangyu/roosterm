@@ -11,13 +11,11 @@ import {
   SignOutIcon,
   WindowConsoleIcon,
 } from "@/components/icons"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { endLabel } from "@/terminal/pane-state"
-import { tabParts, tabText } from "./tabs"
+import { isSwarm, tabParts, tabText } from "./tabs"
 import { BADGE, BADGE_IDLE, BADGE_RUN, ICON_BTN } from "./classes"
-import { isSwarm } from "./tabs"
 
 // .dot / .dot.live
 function Dot({ live, className }: { live: boolean; className?: string }) {
@@ -26,12 +24,13 @@ function Dot({ live, className }: { live: boolean; className?: string }) {
 
 // .badge.run "Running" / .badge.idle "Exited (…)"
 function SessionBadge({ tab, className }: { tab: Tab; className?: string }) {
-  const running = tab.end === null
+  const { end } = tab
+  const running = end === null
   return (
-    <Badge className={cn(BADGE, running ? BADGE_RUN : BADGE_IDLE, className)}>
+    <span className={cn(BADGE, running ? BADGE_RUN : BADGE_IDLE, className)}>
       <Dot live={running} />
-      {tab.end === null ? "Running" : endLabel(tab.end)}
-    </Badge>
+      {running ? "Running" : endLabel(end)}
+    </span>
   )
 }
 
@@ -53,6 +52,8 @@ function TabLabel({ tab, folderMax = "max-w-[20ch]" }: { tab: Tab; folderMax?: s
     </span>
   )
 }
+
+const HIDE_LABEL = "Hide tab (session keeps running)"
 
 // Ghost icon button; `title` is the desktop tooltip, left off on phone.
 function IconAction({
@@ -118,8 +119,6 @@ function HideButton({
     </IconAction>
   )
 }
-
-const HIDE_LABEL = "Hide tab (session keeps running)"
 
 // Mockup 3 screen 02 `.rail`: brand, section label, session cards, dashed "New session", footer with sign-out.
 export function SessionRail({ tabs, activeId, onSelect, onNew, onHide, onLogout }: SessionsProps & { onLogout: () => void }) {

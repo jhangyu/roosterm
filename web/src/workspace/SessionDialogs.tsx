@@ -14,6 +14,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { BTN, BTN_DANGER, BTN_PRIMARY, DIALOG, FIELD_INPUT, FIELD_LABEL, ICON_BTN } from "./classes"
 
+// docs/api.md "Label: 1–64 characters" (PATCH /api/tabs/{id}): the host returns 400 past it.
+const LABEL_MAX_CHARS = 64
+
 // Not in mockup 3: rename dialog in the screen-03 dialog style (head row, field, right-aligned actions).
 export function RenameDialog({ tab, onCancel, onRename }: { tab: Tab | null; onCancel: () => void; onRename: (id: string, label: string) => void }) {
   return (
@@ -47,7 +50,7 @@ function RenameForm({ tab, onRename }: { tab: Tab; onRename: (id: string, label:
         <Input
           id="session-label"
           autoFocus
-          maxLength={64}
+          maxLength={LABEL_MAX_CHARS}
           className={FIELD_INPUT}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -72,7 +75,7 @@ function RenameForm({ tab, onRename }: { tab: Tab; onRename: (id: string, label:
 export function CloseConfirm({ tab, onCancel, onConfirm }: { tab: Tab | null; onCancel: () => void; onConfirm: (id: string) => void }) {
   return (
     <AlertDialog open={tab !== null} onOpenChange={(o) => !o && onCancel()}>
-      <AlertDialogContent className={`${DIALOG} data-[size=default]:max-w-[calc(100%-2rem)] data-[size=default]:sm:max-w-[480px]`}>
+      <AlertDialogContent className={`${DIALOG} sm:max-w-[480px]`}>
         <AlertDialogTitle className="mb-1.5 text-subtitle1 font-semibold">Close “{tab?.label}”?</AlertDialogTitle>
         <AlertDialogDescription className="mb-[22px] text-body text-muted-foreground">
           Closing the session ends the program running in it.
