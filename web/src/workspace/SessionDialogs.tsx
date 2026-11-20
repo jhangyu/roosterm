@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { BTN, BTN_DANGER, BTN_PRIMARY, DIALOG, FIELD_INPUT, ICON_BTN } from "./classes"
+import { BTN, BTN_DANGER, BTN_PRIMARY, DIALOG, FIELD_INPUT, FIELD_LABEL, ICON_BTN } from "./classes"
 
 // Not in mockup 3: rename dialog in the screen-03 dialog style (head row, field, right-aligned actions).
 export function RenameDialog({ tab, onCancel, onRename }: { tab: Tab | null; onCancel: () => void; onRename: (id: string, label: string) => void }) {
@@ -43,7 +43,7 @@ function RenameForm({ tab, onRename }: { tab: Tab; onRename: (id: string, label:
         </DialogClose>
       </div>
       <div className="mb-[26px] grid gap-1.5">
-        <Label htmlFor="session-label" className="text-body leading-(--lh-body) font-semibold">Name</Label>
+        <Label htmlFor="session-label" className={FIELD_LABEL}>Name</Label>
         <Input
           id="session-label"
           autoFocus

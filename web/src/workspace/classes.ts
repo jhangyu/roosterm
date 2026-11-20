@@ -16,6 +16,9 @@ export const ICON_BTN = "size-9 rounded-sm text-grey-26 hover:bg-foreground/5 ho
 export const FIELD_INPUT =
   "h-10 rounded-sm border-input border-b-grey-38 bg-card px-3 py-0 text-body focus-visible:border-input focus-visible:border-b-2 focus-visible:border-b-primary focus-visible:ring-0"
 
+// Dialog and login field labels.
+export const FIELD_LABEL = "text-body leading-(--lh-body) font-semibold"
+
 // .badge base + .run / .idle
 export const BADGE = "h-[22px] gap-1.5 rounded-full border-0 px-2.5 text-caption font-semibold leading-none"
 export const BADGE_RUN = "bg-success-bg text-success inset-ring inset-ring-success-border"

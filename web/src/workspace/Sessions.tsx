@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import type { Tab } from "@/api/types"
 import {
   AddIcon,
@@ -50,6 +51,71 @@ function TabLabel({ tab, folderMax = "max-w-[20ch]" }: { tab: Tab; folderMax?: s
       <span className={cn("shrink-0 truncate", folderMax)}>{folder}</span>
       {summary !== "" && <span className="min-w-0 truncate font-normal whitespace-pre">{` · ${summary}`}</span>}
     </span>
+  )
+}
+
+// Ghost icon button; `title` is the desktop tooltip, left off on phone.
+function IconAction({
+  label,
+  title,
+  className,
+  onClick,
+  children,
+}: {
+  label: string
+  title?: string
+  className: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <Button variant="ghost" className={className} aria-label={label} title={title} onClick={onClick}>
+      {children}
+    </Button>
+  )
+}
+
+function SignOutButton({ onLogout, className, title }: { onLogout: () => void; className: string; title?: string }) {
+  return (
+    <IconAction label="Sign out" title={title} className={className} onClick={onLogout}>
+      <SignOutIcon />
+    </IconAction>
+  )
+}
+
+function RenameButton({ tab, onRename, className, title }: { tab: Tab; onRename: (tab: Tab) => void; className: string; title?: string }) {
+  return (
+    <IconAction label="Rename session" title={title} className={className} onClick={() => onRename(tab)}>
+      <EditIcon />
+    </IconAction>
+  )
+}
+
+function CloseButton({ tab, onClose, className, title }: { tab: Tab; onClose: (tab: Tab) => void; className: string; title?: string }) {
+  return (
+    <IconAction label="Close session" title={title} className={className} onClick={() => onClose(tab)}>
+      <DeleteIcon />
+    </IconAction>
+  )
+}
+
+function HideButton({
+  tab,
+  onHide,
+  className,
+  iconClass,
+  title,
+}: {
+  tab: Tab
+  onHide: (tab: Tab) => void
+  className: string
+  iconClass: string
+  title?: string
+}) {
+  return (
+    <IconAction label={`${HIDE_LABEL}: ${tab.label}`} title={title} className={className} onClick={() => onHide(tab)}>
+      <DismissIcon className={iconClass} />
+    </IconAction>
   )
 }
 
@@ -114,19 +180,17 @@ export function SessionRail({ tabs, activeId, onSelect, onNew, onHide, onLogout 
                     <SessionBadge tab={tab} className="mt-2" />
                   </span>
                 </Button>
-                <Button
-                  variant="ghost"
+                <HideButton
+                  tab={tab}
+                  onHide={onHide}
+                  title={HIDE_LABEL}
+                  iconClass="size-4 shrink-0"
                   className={cn(
                     ICON_BTN,
                     "absolute top-2 right-2 size-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
                     active && "opacity-100",
                   )}
-                  aria-label={`${HIDE_LABEL}: ${tab.label}`}
-                  title={HIDE_LABEL}
-                  onClick={() => onHide(tab)}
-                >
-                  <DismissIcon className="size-4 shrink-0" />
-                </Button>
+                />
               </div>
             )
           })}
@@ -151,9 +215,7 @@ export function SessionRail({ tabs, activeId, onSelect, onNew, onHide, onLogout 
           Signed in
           <small className="block truncate text-[11px] text-muted-foreground">Sessions keep running</small>
         </span>
-        <Button variant="ghost" className={ICON_BTN} aria-label="Sign out" title="Sign out" onClick={onLogout}>
-          <SignOutIcon />
-        </Button>
+        <SignOutButton onLogout={onLogout} className={ICON_BTN} title="Sign out" />
       </div>
     </nav>
   )
@@ -169,12 +231,8 @@ export function MainHead({ active, onRename, onClose }: { active: Tab } & Active
       <SessionBadge tab={active} />
       <span className="truncate font-mono text-caption leading-5 text-muted-foreground">{active.id}</span>
       <span className="flex-1" />
-      <Button variant="ghost" className={ICON_BTN} aria-label="Rename session" title="Rename session" onClick={() => onRename(active)}>
-        <EditIcon />
-      </Button>
-      <Button variant="ghost" className={ICON_BTN} aria-label="Close session" title="Close session" onClick={() => onClose(active)}>
-        <DeleteIcon />
-      </Button>
+      <RenameButton tab={active} onRename={onRename} className={ICON_BTN} title="Rename session" />
+      <CloseButton tab={active} onClose={onClose} className={ICON_BTN} title="Close session" />
     </div>
   )
 }
@@ -204,17 +262,11 @@ export function PhoneBar({
         </div>
         {active !== null && (
           <>
-            <Button variant="ghost" className={phoneBtn} aria-label="Rename session" onClick={() => onRename(active)}>
-              <EditIcon />
-            </Button>
-            <Button variant="ghost" className={phoneBtn} aria-label="Close session" onClick={() => onClose(active)}>
-              <DeleteIcon />
-            </Button>
+            <RenameButton tab={active} onRename={onRename} className={phoneBtn} />
+            <CloseButton tab={active} onClose={onClose} className={phoneBtn} />
           </>
         )}
-        <Button variant="ghost" className={phoneBtn} aria-label="Sign out" onClick={onLogout}>
-          <SignOutIcon />
-        </Button>
+        <SignOutButton onLogout={onLogout} className={phoneBtn} />
       </div>
       <div className="flex gap-2 overflow-x-auto px-4 pb-2.5 [scrollbar-width:none]">
         {tabs.map((tab) => {
@@ -237,14 +289,12 @@ export function PhoneBar({
                 {on && tab.end === null && <Dot live className="text-success" />}
                 <TabLabel tab={tab} folderMax="max-w-[12ch]" />
               </Button>
-              <Button
-                variant="ghost"
-                aria-label={`${HIDE_LABEL}: ${tab.label}`}
-                onClick={() => onHide(tab)}
+              <HideButton
+                tab={tab}
+                onHide={onHide}
+                iconClass="size-3.5 shrink-0"
                 className="mr-1 size-6 rounded-full p-0 text-grey-38 hover:bg-foreground/5 hover:text-foreground"
-              >
-                <DismissIcon className="size-3.5 shrink-0" />
-              </Button>
+              />
             </span>
           )
         })}

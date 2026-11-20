@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { BTN_PRIMARY, FIELD_INPUT, ICON_BTN } from "@/workspace/classes"
+import { BTN_PRIMARY, FIELD_INPUT, FIELD_LABEL, ICON_BTN } from "@/workspace/classes"
 
 function loginMessage(e: ApiError): string {
   if (e.status === HTTP_STATUS.unauthorized) return `Wrong username or password. ${e.message}`
@@ -51,7 +51,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
             <ServerIcon className="size-4 shrink-0" /> {window.location.host} · terminal portal
           </p>
           <div className="mb-[18px] grid gap-1.5">
-            <Label htmlFor="username" className="text-body leading-(--lh-body) font-semibold">Username</Label>
+            <Label htmlFor="username" className={FIELD_LABEL}>Username</Label>
             <Input
               id="username"
               autoComplete="username"
@@ -62,7 +62,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: () => void }) {
             />
           </div>
           <div className="mb-[18px] grid gap-1.5">
-            <Label htmlFor="password" className="text-body leading-(--lh-body) font-semibold">Password</Label>
+            <Label htmlFor="password" className={FIELD_LABEL}>Password</Label>
             <div className="relative flex items-center">
               <Input
                 id="password"
