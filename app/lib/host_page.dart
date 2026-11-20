@@ -33,16 +33,14 @@ class _HostPageState extends State<HostPage> {
       ..loadRequest(widget.host.url);
   }
 
-  // Android: hybrid composition (a real view in the hierarchy) instead of the surface
-  // embedding, which made page animations stutter. iOS has no such setting.
+  // Hybrid composition (a real view in the hierarchy) instead of the surface
+  // embedding, which made page animations stutter.
   Widget _webView() {
     final params = PlatformWebViewWidgetCreationParams(controller: _controller.platform);
     return WebViewWidget.fromPlatformCreationParams(
-      params: _controller.platform is AndroidWebViewController
-          ? AndroidWebViewWidgetCreationParams.fromPlatformWebViewWidgetCreationParams(
-              params,
-              displayWithHybridComposition: true)
-          : params,
+      params: AndroidWebViewWidgetCreationParams.fromPlatformWebViewWidgetCreationParams(
+          params,
+          displayWithHybridComposition: true),
     );
   }
 

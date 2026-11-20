@@ -2,23 +2,18 @@ import 'package:flutter/material.dart';
 
 // Values from docs/mockups/3-calm-surfaces.html :root (Fluent 2 colors, Material 3 shape scale).
 const Color brand = Color(0xFF0F6CBD);
-const Color brandHover = Color(0xFF115EA3);
 const Color brandTint = Color(0xFFEBF3FC);
 const Color brandTintForeground = Color(0xFF0F548C);
 const Color background = Color(0xFFF3F3F3);
 const Color foreground = Color(0xFF242424);
 const Color card = Color(0xFFFFFFFF);
-const Color secondary = Color(0xFFF5F5F5);
 const Color mutedForeground = Color(0xFF616161);
 const Color border = Color(0xFFE0E0E0);
 const Color input = Color(0xFFD1D1D1);
 const Color destructive = Color(0xFFB10E1C);
-const Color destructiveBg = Color(0xFFFDF3F4);
-const Color destructiveBorder = Color(0xFFEEACB2);
 
 const double radiusSm = 8;
 const double radiusMd = 12;
-const double radiusLg = 16;
 const double radiusXl = 28;
 
 ThemeData buildTheme() {

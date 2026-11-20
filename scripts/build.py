@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build roosterm into build/: the web client (when web/package.json exists), then the Go binary.
+"""Build roosterm into build/: the web client, then the Go binary.
 
 python3 scripts/build.py                        -> build/roosterm (host platform)
 python3 scripts/build.py --target linux/arm64   -> build/roosterm-linux-arm64
@@ -36,11 +36,8 @@ def main() -> None:
             ap.error(f"--target: expected GOOS/GOARCH like linux/arm64, got {args.target!r}")
         env["GOOS"], env["GOARCH"] = parts
         name = f"roosterm-{parts[0]}-{parts[1]}"
-    if (WEB / "package.json").exists():
-        step(["npm", "ci", "--prefix", str(WEB)], ROOT)
-        step(["npm", "run", "build", "--prefix", str(WEB)], ROOT)
-    else:
-        print("web/: no package.json, embedding host/internal/web/dist as committed")
+    step(["npm", "ci", "--prefix", str(WEB)], ROOT)
+    step(["npm", "run", "build", "--prefix", str(WEB)], ROOT)
     BUILD.mkdir(exist_ok=True)
     out = BUILD / name
     step(["go", "build", "-trimpath", "-o", str(out), "./cmd/roosterm"], HOST, env)
