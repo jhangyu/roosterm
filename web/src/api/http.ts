@@ -1,4 +1,4 @@
-import { ApiError, parseTabEnd, type Tab } from "./types"
+import { ApiError, parseTabEnd, type CreateRequest, type Tab } from "./types"
 
 // Backend error body: {"error":{op,tab?,message,kind,hint?}}. Anything else (e.g. a proxy page) is shown raw.
 function errorFromBody(op: string, status: number, text: string, tabId: string | undefined, retryAfter: string | null): ApiError {
@@ -87,24 +87,21 @@ export async function listTabs(): Promise<Tab[]> {
 }
 
 // cwd: folder relative to the host home ("" = home); the host validates it like GET /api/dirs.
-export async function createTab(request: { command?: string[]; label?: string; cwd?: string }): Promise<Tab> {
+export async function createTab(request: CreateRequest): Promise<Tab> {
   const op = "create tab"
   const res = await call(op, "POST", "/api/tabs", request)
   return parseTab(op, res.status, await json(op, res))
 }
 
-export async function renameTab(id: string, label: string): Promise<Tab> {
-  const op = "rename tab"
-  const res = await call(op, "PATCH", tabPath(id), { label }, id)
+async function patchTab(op: string, id: string, body: { label: string } | { hidden: boolean }): Promise<Tab> {
+  const res = await call(op, "PATCH", tabPath(id), body, id)
   return parseTab(op, res.status, await json(op, res))
 }
 
+export const renameTab = (id: string, label: string): Promise<Tab> => patchTab("rename tab", id, { label })
+
 // Hide or re-show a tab (PATCH /api/tabs/{id} {"hidden": bool}); the process is untouched.
-export async function setTabHidden(id: string, hidden: boolean): Promise<Tab> {
-  const op = hidden ? "hide tab" : "show tab"
-  const res = await call(op, "PATCH", tabPath(id), { hidden }, id)
-  return parseTab(op, res.status, await json(op, res))
-}
+export const setTabHidden = (id: string, hidden: boolean): Promise<Tab> => patchTab(hidden ? "hide tab" : "show tab", id, { hidden })
 
 export async function closeTab(id: string): Promise<void> {
   await call("close tab", "DELETE", tabPath(id), undefined, id)

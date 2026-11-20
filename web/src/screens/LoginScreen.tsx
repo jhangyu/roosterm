@@ -1,6 +1,6 @@
 import { useState, type SubmitEvent } from "react"
 import { login } from "@/api/http"
-import { ApiError } from "@/api/types"
+import { ApiError, HTTP_STATUS } from "@/api/types"
 import { EyeIcon, EyeOffIcon, LockClosedIcon, ServerIcon, WindowConsoleIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -9,8 +9,8 @@ import { Label } from "@/components/ui/label"
 import { BTN_PRIMARY, FIELD_INPUT, ICON_BTN } from "@/workspace/classes"
 
 function loginMessage(e: ApiError): string {
-  if (e.status === 401) return `Wrong username or password. ${e.message}`
-  if (e.status === 429) {
+  if (e.status === HTTP_STATUS.unauthorized) return `Wrong username or password. ${e.message}`
+  if (e.status === HTTP_STATUS.tooManyRequests) {
     return e.retryAfter === null ? e.message : `Too many attempts. Try again in ${e.retryAfter} seconds. ${e.message}`
   }
   return e.message

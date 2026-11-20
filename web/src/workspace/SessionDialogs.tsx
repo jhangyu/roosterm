@@ -18,7 +18,7 @@ import { BTN, BTN_DANGER, BTN_PRIMARY, DIALOG, FIELD_INPUT, ICON_BTN } from "./c
 export function RenameDialog({ tab, onCancel, onRename }: { tab: Tab | null; onCancel: () => void; onRename: (id: string, label: string) => void }) {
   return (
     <Dialog open={tab !== null} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent className={DIALOG} showCloseButton={false}>
+      <DialogContent className={DIALOG}>
         {tab !== null && <RenameForm key={tab.id} tab={tab} onRename={onRename} />}
       </DialogContent>
     </Dialog>

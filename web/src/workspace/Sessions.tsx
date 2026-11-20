@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
 import { endLabel } from "@/terminal/pane-state"
 import { tabParts, tabText } from "./tabs"
 import { BADGE, BADGE_IDLE, BADGE_RUN, ICON_BTN } from "./classes"
-import { isSwarm } from "./NewSessionDialog"
+import { isSwarm } from "./tabs"
 
 // .dot / .dot.live
 function Dot({ live, className }: { live: boolean; className?: string }) {
@@ -24,7 +24,7 @@ function Dot({ live, className }: { live: boolean; className?: string }) {
 }
 
 // .badge.run "Running" / .badge.idle "Exited (…)"
-export function SessionBadge({ tab, className }: { tab: Tab; className?: string }) {
+function SessionBadge({ tab, className }: { tab: Tab; className?: string }) {
   const running = tab.end === null
   return (
     <Badge className={cn(BADGE, running ? BADGE_RUN : BADGE_IDLE, className)}>
@@ -34,7 +34,7 @@ export function SessionBadge({ tab, className }: { tab: Tab; className?: string 
   )
 }
 
-export type SessionsProps = {
+type SessionsProps = {
   tabs: Tab[]
   activeId: string | null
   onSelect: (id: string) => void

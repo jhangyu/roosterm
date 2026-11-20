@@ -1,4 +1,4 @@
-import type { Tab } from "@/api/types"
+import type { CreateRequest, Tab } from "@/api/types"
 
 // tabs: the tab strip; hidden: sessions hidden on any client (listed in the New-session dialog for re-showing).
 export type Workspace = { tabs: Tab[]; hidden: Tab[]; activeId: string | null }
@@ -18,7 +18,25 @@ export function applyListing(ws: Workspace, listed: Tab[]): Workspace {
   return { tabs: [...shown.slice(0, pos), active, ...shown.slice(pos)], hidden, activeId: active.id }
 }
 
-const CLAUDE_PROGRAM = "claude"
+// Claude Code runs `claude` in the chosen folder (contract: client sends command ["claude"]; host reports program "claude").
+export const CLAUDE_PROGRAM = "claude"
+export const CLAUDE_COMMAND = [CLAUDE_PROGRAM]
+
+// ponytail: the API's Tab has no command, so a swarm tab is recognised by its socket-name label (as created by the New-session dialog);
+// a renamed swarm tab is treated as a shell. Add a command field to Tab if that matters.
+export const isSwarm = (tab: Tab) => tab.label.startsWith("claude-swarm-")
+
+// Swarm attach request (docs/api.md: POST /api/tabs).
+export const swarmTab = (name: string): CreateRequest => ({ command: ["tmux", "-L", name, "a"], label: name })
+
+// Same kind, folder and label as the given tab: swarm => re-attach to its socket; Claude Code => `claude` in the same
+// folder; shell => server default shell in the same folder. The caller restores `renamed` (create cannot set it).
+export const restartRequest = (tab: Tab): CreateRequest =>
+  isSwarm(tab)
+    ? swarmTab(tab.label)
+    : tab.program === CLAUDE_PROGRAM
+      ? { command: CLAUDE_COMMAND, cwd: tab.cwd, label: tab.label }
+      : { cwd: tab.cwd, label: tab.label }
 
 // Tab label split for display: the folder part never truncates before the summary does.
 // Only a not-renamed Claude Code tab with a non-empty title gets a summary (shells set titles too, so they stay folder-only).

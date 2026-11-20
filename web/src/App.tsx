@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { closeTab, createTab, listTabs, logout, renameTab, setTabHidden } from "@/api/http"
-import { ApiError, type Tab, type TabEnd } from "@/api/types"
+import { ApiError, HTTP_STATUS, type CreateRequest, type Tab, type TabEnd } from "@/api/types"
 import { AddIcon, ArrowClockwiseIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { onResume } from "@/lib/resume"
@@ -8,16 +8,14 @@ import { LoginScreen } from "@/screens/LoginScreen"
 import { TerminalPane } from "@/terminal/TerminalPane"
 import { BTN_PRIMARY } from "@/workspace/classes"
 import { ErrorAlert } from "@/workspace/ErrorAlert"
-import { NewSessionDialog, restartRequest, type CreateRequest } from "@/workspace/NewSessionDialog"
+import { NewSessionDialog } from "@/workspace/NewSessionDialog"
 import { CloseConfirm, RenameDialog } from "@/workspace/SessionDialogs"
 import { MainHead, PhoneBar, SessionRail } from "@/workspace/Sessions"
-import { applyListing, hideTab, removeTab, showTab, withTitle, type Workspace } from "@/workspace/tabs"
+import { applyListing, hideTab, removeTab, restartRequest, showTab, withTitle, type Workspace } from "@/workspace/tabs"
 
 type Auth = "checking" | "anonymous" | "signed-in"
 
-// ApiError.status values the shell reacts to (0 = the request never reached the host).
-const NETWORK_FAILURE = 0
-const NOT_FOUND = 404
+const isGone = (e: unknown) => e instanceof ApiError && e.status === HTTP_STATUS.notFound
 
 export default function App() {
   const [auth, setAuth] = useState<Auth>("checking")
@@ -45,8 +43,8 @@ export default function App() {
         linkDown.current = false
       } catch (e) {
         if (!(e instanceof ApiError)) throw e
-        if (e.status === 401) signOut()
-        else if (!(e.status === NETWORK_FAILURE && linkDown.current)) setError(e)
+        if (e.status === HTTP_STATUS.unauthorized) signOut()
+        else if (!(e.status === HTTP_STATUS.networkFailure && linkDown.current)) setError(e)
       }
     },
     [signOut],
@@ -86,7 +84,7 @@ export default function App() {
     try {
       await closeTab(id)
     } catch (e) {
-      if (!(e instanceof ApiError && e.status === NOT_FOUND)) throw e
+      if (!isGone(e)) throw e
     }
     setWs((ws) => removeTab(ws, id))
   }
@@ -104,7 +102,7 @@ export default function App() {
         const updated = await setTabHidden(tab.id, true)
         setWs((ws) => hideTab(ws, updated))
       } catch (e) {
-        if (!(e instanceof ApiError && e.status === NOT_FOUND)) throw e
+        if (!isGone(e)) throw e
         setWs((ws) => removeTab(ws, tab.id))
       }
     })

@@ -1,7 +1,7 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react"
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
 import { listSwarms } from "@/api/http"
-import { ApiError, type Tab } from "@/api/types"
+import { ApiError, HTTP_STATUS, type CreateRequest, type Tab } from "@/api/types"
 import { BotIcon, CheckmarkIcon, DismissIcon, EyeIcon, PeopleTeamIcon, WindowConsoleIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
@@ -10,26 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { BTN, BTN_PRIMARY, ICON_BTN } from "./classes"
 import { FolderPicker, KBD, RecentFolders, StartsIn, useFolderBrowser } from "./FolderPicker"
 import { baseName } from "./folders"
-
-// cwd: start folder relative to the host home ("" = home).
-export type CreateRequest = { command?: string[]; label?: string; cwd?: string }
-
-// ponytail: the API's Tab has no command, so a swarm tab is recognised by its socket-name label (as created by this dialog);
-// a renamed swarm tab is treated as a shell. Add a command field to Tab if that matters.
-export const isSwarm = (tab: Tab) => tab.label.startsWith("claude-swarm-")
-
-// Claude Code runs `claude` in the chosen folder (contract: client sends command ["claude"]; host reports program "claude").
-const CLAUDE_PROGRAM = "claude"
-const CLAUDE_COMMAND = [CLAUDE_PROGRAM]
-
-// Same kind, folder and label as the given tab: swarm => re-attach to its socket; Claude Code => `claude` in the same
-// folder; shell => server default shell in the same folder. The caller restores `renamed` (create cannot set it).
-export const restartRequest = (tab: Tab): CreateRequest =>
-  isSwarm(tab)
-    ? swarmTab(tab.label)
-    : tab.program === CLAUDE_PROGRAM
-      ? { command: CLAUDE_COMMAND, cwd: tab.cwd, label: tab.label }
-      : { cwd: tab.cwd, label: tab.label }
+import { CLAUDE_COMMAND, swarmTab } from "./tabs"
 
 type Props = {
   open: boolean
@@ -42,10 +23,6 @@ type Props = {
 
 type Kind = "shell" | "claude" | "swarm"
 type Swarms = { kind: "loading" } | { kind: "ready"; names: string[] } | { kind: "error"; message: string }
-
-// Swarm tab request (backend plan, HTTP/WS API: POST /api/tabs); the socket name doubles as the tab label.
-export const swarmTab = (name: string): CreateRequest => ({ command: ["tmux", "-L", name, "a"], label: name })
-
 
 const KINDS: { value: Kind; icon: ReactNode; title: string; hint: string }[] = [
   { value: "shell", icon: <WindowConsoleIcon />, title: "Shell", hint: "Login shell in the folder below" },
@@ -95,7 +72,7 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow,
       },
       (e: unknown) => {
         if (!(e instanceof ApiError)) throw e
-        if (e.status === 401) onUnauthorized()
+        if (e.status === HTTP_STATUS.unauthorized) onUnauthorized()
         else if (current) setSwarms({ kind: "error", message: e.message })
       },
     )
@@ -134,7 +111,6 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow,
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* Desktop: 560 px dialog, the body scrolls inside 100dvh - 32. Phone (< md): full-height bottom sheet 48 px below the top. */}
       <DialogContent
-        showCloseButton={false}
         onKeyDown={onKeyDown}
         className="flex flex-col gap-0 bg-popover text-body shadow-64 ring-0 sm:max-w-none max-md:top-12 max-md:bottom-0 max-md:left-0 max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-t-xl max-md:rounded-b-none max-md:p-0 md:max-h-[calc(100dvh-2rem)] md:w-[560px] md:max-w-[calc(100%-2rem)] md:rounded-xl md:p-7 md:pb-6"
       >
