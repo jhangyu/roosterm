@@ -14,11 +14,11 @@ browser / Flutter WebView ──HTTPS (user's reverse proxy)──▶ roosterm (
 ```
 - `host/`: login, REST for tabs, one WebSocket per tab (`/ws/tabs/{id}`), embedded web files (`go:embed`). It holds no process and keeps no tab state.
 - `web/`: React + Vite + xterm.js client; the key bar and reconnect logic live here and are shared with the app.
-- `app/`: Flutter WebView plus a host list; the WebView keeps the cookie.
+- `app/`: Flutter WebView plus a host list; the WebView keeps the cookie and navigation is restricted to the host origin.
 - hc (pinned 0.1.21, see `docs/hc-bridge.md`): owns every PTY and runs `$SHELL -l`, `claude`, `tmux -L claude-swarm-<pid> a`.
 - A tab is an hc terminal labelled `roosterm=tab`; the hc terminal list is the only tab store.
 - Swarm shortcut: list `claude-swarm-*` sockets under `${TMUX_TMPDIR:-/tmp}/tmux-<uid>`.
-- Auth: one account, argon2id hash in `config.toml`, session cookie (HttpOnly, Secure, SameSite=Strict), session file mode 0600, failed-login rate limit (429 with Retry-After).
+- Auth: one account, argon2id hash in `config.toml`, session cookie (HttpOnly, Secure, SameSite=Strict), session file mode 0600, failed-login rate limit in two buckets (known-device cookie vs anonymous, 429 with Retry-After), cross-origin check on state-changing requests (Go `net/http` CrossOriginProtection) and required JSON Content-Type, sessions dropped at start when the password hash changed.
 - No Docker, no database, no Node at run time. Details: `docs/api.md`, `docs/hc-bridge.md`.
 
 ## Process survival

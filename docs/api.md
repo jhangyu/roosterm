@@ -4,13 +4,14 @@ This file is the living contract. Code wins on conflict, and this file must be f
 
 ## Overview
 
-All paths are same-origin. JSON bodies are UTF-8, `Content-Type: application/json`. Request bodies are limited to 64 KiB (413, kind `bad_request`). Unknown JSON fields are rejected (400).
+All paths are same-origin. JSON bodies are UTF-8 and must carry `Content-Type: application/json`, else 415 (kind `bad_request`). Any POST, PATCH or DELETE (including `/login` and `/logout`) that the browser marks as not same-origin (`Sec-Fetch-Site` other than `same-origin`/`none`, or, when that header is absent, an `Origin` whose host differs from `Host`) gets 403, kind `cross_origin`; clients that send neither header (curl, scripts) are not affected. Request bodies are limited to 64 KiB (413, kind `bad_request`). Unknown JSON fields are rejected (400).
 
 Tabs are hc terminals carrying the label `roosterm=tab`; the title lives in label `roosterm.name`. roosterm stores no tab state. Terminals made outside roosterm are invisible to it.
 
 ### Cookie
 `roosterm_session=<token>; Path=/; Max-Age=<session_ttl seconds>; HttpOnly; Secure; SameSite=Strict`
 - `<token>`: 32 bytes from `crypto/rand`, base64url without padding (43 chars). The server stores only `sha256(token)` hex.
+- A successful `/login` also sets `roosterm_device=<marker>; Path=/login; Max-Age=34560000; HttpOnly; Secure; SameSite=Strict` (400 days). The marker is an HMAC of the password hash; it only selects the login rate bucket.
 - Logout / expiry clear: same attributes with `Max-Age=0` and empty value.
 - `Secure` is always set (the reverse proxy terminates TLS; browsers treat `http://localhost` as secure for cookies).
 
@@ -24,6 +25,8 @@ Tabs are hc terminals carrying the label `roosterm=tab`; the title lives in labe
 |---|---|---|
 | `bad_request` | 400 | malformed JSON, unknown field, invalid value (message names field, expected, actual) |
 | `bad_request` | 405 | a method other than GET/HEAD on a static (non-`/api/`, non-`/login`, non-`/logout`, non-`/ws/`) path |
+| `bad_request` | 415 | request body present but `Content-Type` is not `application/json` |
+| `cross_origin` | 403 | POST/PATCH/DELETE marked cross-origin by the browser (checked before routing, so it wins over 405) |
 | `bad_request` | 413 | request body over 64 KiB |
 | `unauthorized` | 401 | missing/unknown/expired cookie; wrong credentials on `/login` |
 | `not_found` | 404 | tab id unknown to hc, or exists but lacks label `roosterm=tab`; directory path missing or not a directory; unknown `/api/...` path or method (op `api`) |
@@ -83,7 +86,7 @@ Live ⇒ `terminal.kill` then `terminal.rm`; finished ⇒ `terminal.rm`.
 Lists the sub-directories of `path` (relative to home; empty = home), sorted by name; `hidden` is true for dot-names. Symlinks are listed only when they resolve to a directory inside home. Errors: 400 absolute path, `..` segment or NUL byte; 403 `outside_home` or `permission_denied`; 404 missing or not a directory.
 
 ### Login rate limit
-After 5 consecutive failures every `/login` returns 429 for 60 s; a success resets the count. Requests during lockout do not extend it and are not checked against the password. The limit is global (single user), not per IP.
+After 5 consecutive failures every `/login` returns 429 for 60 s; a success resets the count. Requests during lockout do not extend it and are not checked against the password. Failures are counted in two buckets: browsers that send a valid `roosterm_device` cookie, and everyone else; each bucket has its own count and lockout. The limit is not per IP.
 
 ## WebSocket `/ws/tabs/{id}?cols=N&rows=N`
 
@@ -128,4 +131,4 @@ shell = "/bin/zsh"
 username = "me"
 password_hash = "$argon2id$v=19$m=65536,t=3,p=4$<salt b64>$<key b64>"
 ```
-Sessions file: `sessions.json` in the same directory as the config file, mode 0600.
+Sessions file: `sessions.json` in the same directory as the config file, mode 0600. It records a digest of the password hash; a server that starts with a different hash drops every session, so after `roosterm passwd` all devices are logged out once the server restarts.

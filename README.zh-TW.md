@@ -15,7 +15,7 @@ roosterm 只是終端機外殼：它不解析 Claude Code，也沒有聊天介�
 - **roosterm 不保存分頁狀態。** 分頁就是帶有標籤 `roosterm=tab` 的 hc 終端機，hc 的終端機清單是唯一的分頁儲存處。在 roosterm 之外建立的終端機，roosterm 看不到。
   <!-- evidence: docs/design.md:19; docs/api.md:9 -->
 - **三種新工作階段。** Shell、Claude Code，或接上執行中的 Claude Code swarm（`claude-swarm-*` tmux socket）。
-  <!-- evidence: web/src/workspace/NewSessionDialog.tsx:25 type Kind = "shell" | "claude" | "swarm"; docs/api.md:50 GET /api/swarms; web/src/workspace/tabs.ts:22 CLAUDE_PROGRAM -->
+  <!-- evidence: web/src/workspace/NewSessionDialog.tsx:25 type Kind = "shell" | "claude" | "swarm"; docs/api.md:53 GET /api/swarms; web/src/workspace/tabs.ts:22 CLAUDE_PROGRAM -->
 - **適合手機的按鍵列。** Esc、Tab、Shift-Tab 與方向鍵會送出對應的終端機序列，並支援 application-cursor 模式。
   <!-- evidence: web/src/lib/keys.ts:1-16; web/src/terminal/KeyBar.tsx -->
 - **不靠計時器的重新連線。** 重新連線就是重新 attach，hc 會重繪整個畫面。網頁用戶端在瀏覽器恢復連線或頁面回到前景時重連；hc 的 socket 重新出現時，伺服器端會自動重新連上。
@@ -23,7 +23,7 @@ roosterm 只是終端機外殼：它不解析 Claude Code，也沒有聊天介�
 - **單一獨立執行檔。** 網頁用戶端內嵌在 Go 執行檔中；執行時不需要 Docker、資料庫或 Node。
   <!-- evidence: host/internal/web/static.go:15 //go:embed all:dist; docs/design.md:22 -->
 - **資料夾選擇器與分頁管理。** 可瀏覽家目錄下的子資料夾，在該處開新分頁；分頁可改名，也可從分頁列隱藏（程式仍持續執行）。
-  <!-- evidence: docs/api.md:49 GET /api/dirs, :47 PATCH /api/tabs/{id} (label, hidden); web/src/workspace/FolderPicker.tsx -->
+  <!-- evidence: docs/api.md:52 GET /api/dirs, :47 PATCH /api/tabs/{id} (label, hidden); web/src/workspace/FolderPicker.tsx -->
 
 ### 目錄
 
@@ -52,7 +52,7 @@ browser / Flutter WebView ──HTTPS (你的反向代理)──▶ roosterm (�
 <!-- evidence: docs/design.md:11-22; docs/hc-bridge.md:1 hc 0.1.21; web/package.json:15-16 react and @xterm/xterm dependencies -->
 
 roosterm 本身不處理 TLS：它以純 HTTP 監聽（預設 `127.0.0.1:8787`），HTTPS 需由反向代理負責。
-<!-- evidence: host/internal/config/config.go:17 DefaultListen; host/cmd/roosterm/serve.go:71 net.Listen("tcp") with no TLS; docs/api.md:15 "the reverse proxy terminates TLS" -->
+<!-- evidence: host/internal/config/config.go:17 DefaultListen; host/cmd/roosterm/serve.go:71 net.Listen("tcp") with no TLS; docs/api.md:16 "the reverse proxy terminates TLS" -->
 
 ### 需求
 
@@ -60,7 +60,7 @@ roosterm 本身不處理 TLS：它以純 HTTP 監聽（預設 `127.0.0.1:8787`�
   <!-- evidence: docs/design.md:18,35; deploy/README.md:3 -->
 - macOS 或 Linux 主機（Windows 主機不在目標內）。提供 launchd（macOS）與 systemd（Linux）的服務腳本。
   <!-- evidence: docs/design.md:7; scripts/service.py:2,176-177; deploy/systemd/roosterm.service -->
-- 建置需要：Go 1.26.4（`host/go.mod`）、Node 與 npm（網頁用戶端）、Python 3（腳本）。
+- 建置需要：Go 1.26.11（`host/go.mod`）、Node 與 npm（網頁用戶端）、Python 3（腳本）。
   <!-- evidence: host/go.mod:3; scripts/build.py:39-45 npm ci, npm run build, go build -->
 - 建置 Android App 需要 Flutter SDK（Dart `^3.12.2`）。
   <!-- evidence: app/pubspec.yaml:8; app/README.md:5-8 -->
@@ -109,7 +109,7 @@ flutter build apk
 | `username` | 由 `passwd` 設定 | 唯一的登入使用者 |
 | `password_hash` | 由 `passwd` 設定 | argon2id 雜湊 |
 
-<!-- evidence: host/internal/config/config.go:17-19 defaults, :39-45 toml keys, :71-72 unknown keys rejected, :105-108 absolute executable shell; docs/api.md:120-130 example file; docs/api.md:70 command omitted => [config.shell, "-l"] -->
+<!-- evidence: host/internal/config/config.go:17-19 defaults, :39-45 toml keys, :71-72 unknown keys rejected, :105-108 absolute executable shell; docs/api.md:123-133 example file; docs/api.md:73 command omitted => [config.shell, "-l"] -->
 
 session 儲存在設定檔旁的 `sessions.json`（權限 0600）。
 <!-- evidence: host/internal/config/config.go:61 SessionsPath; host/internal/auth/session.go:23,55 -->
@@ -146,19 +146,25 @@ loginctl enable-linger "$USER"   # 開機即啟動，不需登入工作階段
 ### 使用用戶端
 
 **網頁用戶端。** 開啟反向代理的 HTTPS 網址並登入。側邊欄列出你的工作階段；新增工作階段的對話框可選 Shell、Claude 或 Swarm，並提供資料夾選擇器。工作階段可改名或隱藏，已結束的工作階段可重新啟動或關閉。關閉分頁會終止仍在執行的程式。
-<!-- evidence: web/src/screens/LoginScreen.tsx; web/src/workspace/Sessions.tsx; web/src/workspace/NewSessionDialog.tsx:25-31; docs/api.md:79-81 DELETE kills live then removes; web/src/terminal/TerminalPane.tsx -->
+<!-- evidence: web/src/screens/LoginScreen.tsx; web/src/workspace/Sessions.tsx; web/src/workspace/NewSessionDialog.tsx:25-31; docs/api.md:82-84 DELETE kills live then removes; web/src/terminal/TerminalPane.tsx -->
 
-**Android App。** 新增主機（名稱加上 `https://` 網址；因為 session cookie 帶有 `Secure`，純 `http` 會被拒絕），再於 WebView 中開啟。僅支援 Android。
-<!-- evidence: app/lib/hosts.dart:10-20; app/lib/host_page.dart:26-27 WebViewController; app/README.md:3 -->
+**Android App。** 新增主機（名稱加上 `https://` 網址；因為 session cookie 帶有 `Secure`，純 `http` 會被拒絕），再於 WebView 中開啟。App 只載入所設定主機同源的頁面；指向其他網站的連結會被擋下，並顯示該網址的提示。僅支援 Android。
+<!-- evidence: app/lib/hosts.dart:10-20,25-32 sameOrigin; app/lib/host_page.dart:26-27 WebViewController; app/lib/host_page.dart:29-34 onNavigationRequest; app/README.md:3 -->
 
 ### 安全性說明
 
-- 單一帳號，argon2id 密碼雜湊存於 `config.toml`。登入限流：連續失敗 5 次會鎖定 `/login` 60 秒（HTTP 429 並附 `Retry-After`）；此限制為全域而非依 IP，登入成功會重置計數。
-  <!-- evidence: host/internal/auth/ratelimit.go:8-10,13,23-24; docs/api.md:85-86 -->
+- 單一帳號，argon2id 密碼雜湊存於 `config.toml`。登入限流：失敗次數分兩個桶計算，帶有 `roosterm_device` cookie 的瀏覽器一桶，其餘一桶；單一桶連續失敗 5 次會鎖定該桶的 `/login` 60 秒（HTTP 429 並附 `Retry-After`），登入成功會重置計數。此限制不是依 IP。
+  <!-- evidence: host/internal/auth/ratelimit.go:8-10,13; host/internal/web/login.go:29-32 bucket choice; host/cmd/roosterm/serve.go:67 two limiters; docs/api.md:89 -->
+- 已知裝置 cookie `roosterm_device`：登入成功時設定，`Path=/login`、400 天、HttpOnly、Secure、SameSite=Strict。它只用來選擇限流桶，不授予任何存取權。
+  <!-- evidence: host/internal/web/login.go:54; host/internal/auth/cookie.go:14-16,28-30 -->
 - Session cookie `roosterm_session`：HttpOnly、Secure、SameSite=Strict；伺服器只保存 token 的 SHA-256。sessions 檔案權限若不是 0600，伺服器會拒絕載入。
-  <!-- evidence: host/internal/auth/cookie.go:10-12; docs/api.md:12,13; host/internal/auth/session.go:55 -->
+  <!-- evidence: host/internal/auth/cookie.go:10-12,33-35; docs/api.md:12,13; host/internal/auth/session.go:57-58 -->
+- 更改密碼會登出所有裝置，但要等伺服器重啟後才生效：`sessions.json` 記錄密碼雜湊的摘要，伺服器以不同雜湊啟動時會丟棄所有 session。執行 `roosterm passwd` 後，舊 session 在重啟 `roosterm serve` 之前仍然有效。要登出所有裝置，再執行一次 `roosterm passwd` 並重啟。升級到此版本後的第一次啟動會讓所有人登出一次。
+  <!-- evidence: host/internal/auth/session.go:32,47-49,68; host/cmd/roosterm/serve.go:61; host/cmd/roosterm/passwd.go:28 -->
+- 跨來源防護：瀏覽器標示為來自其他來源的 POST、PATCH、DELETE 請求（含 `/login`、`/logout`）會以 403、kind `cross_origin` 拒絕。JSON 請求本文必須帶 `Content-Type: application/json`，否則回 415。不經瀏覽器的 API 用戶端必須送出此標頭。
+  <!-- evidence: host/internal/web/server.go:38,41-52 crossOriginGuard; host/internal/apierr/apierr.go:20,76-81 -->
 - 對外暴露的內容：分頁的 REST 端點、每個分頁一條 WebSocket，以及僅限家目錄下的資料夾列表（解析後落在家目錄之外的路徑，含透過 symlink 者，會以 403 拒絕）。能登入的人就擁有 roosterm 使用者身分的完整 shell，因此請放在 HTTPS 之後並使用強密碼。
-  <!-- evidence: docs/api.md:30,83 outside_home -->
+  <!-- evidence: docs/api.md:33,86 outside_home -->
 - 分頁中啟動的程式會取得清理過的環境：繼承自 hc core 的 `TMUX`、`TMUX_PANE` 與 `CLAUDE*` 變數會被 unset。
   <!-- evidence: host/internal/api/scrub.go:5-9 -->
 

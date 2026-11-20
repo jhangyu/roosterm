@@ -15,7 +15,7 @@ roosterm is a terminal shell only: it never parses Claude Code, and has no chat 
 - **No tab state in roosterm.** A tab is an hc terminal carrying the label `roosterm=tab`; the hc terminal list is the only tab store. Terminals created outside roosterm are invisible to it.
   <!-- evidence: docs/design.md:19; docs/api.md:9 -->
 - **Three kinds of new session.** Shell, Claude Code, or attach to a running Claude Code swarm (a `claude-swarm-*` tmux socket).
-  <!-- evidence: web/src/workspace/NewSessionDialog.tsx:25 type Kind = "shell" | "claude" | "swarm"; docs/api.md:50 GET /api/swarms; web/src/workspace/tabs.ts:22 CLAUDE_PROGRAM -->
+  <!-- evidence: web/src/workspace/NewSessionDialog.tsx:25 type Kind = "shell" | "claude" | "swarm"; docs/api.md:53 GET /api/swarms; web/src/workspace/tabs.ts:22 CLAUDE_PROGRAM -->
 - **Mobile-friendly key bar.** Esc, Tab, Shift-Tab and the arrow keys are sent as terminal sequences, honouring application-cursor mode.
   <!-- evidence: web/src/lib/keys.ts:1-16; web/src/terminal/KeyBar.tsx -->
 - **Reconnect without timers.** A reconnect is a fresh attach and hc repaints the whole screen. The web client reconnects when the browser comes back online or the page returns to the foreground; the server re-dials hc when its socket reappears.
@@ -23,7 +23,7 @@ roosterm is a terminal shell only: it never parses Claude Code, and has no chat 
 - **Single self-contained binary.** The web client is embedded in the Go binary; no Docker, database or Node is needed at run time.
   <!-- evidence: host/internal/web/static.go:15 //go:embed all:dist; docs/design.md:22 -->
 - **Folder picker and tab management.** Browse sub-directories under your home to start a tab there; rename a tab or hide it from the tab strip while its process keeps running.
-  <!-- evidence: docs/api.md:49 GET /api/dirs, :47 PATCH /api/tabs/{id} (label, hidden); web/src/workspace/FolderPicker.tsx -->
+  <!-- evidence: docs/api.md:52 GET /api/dirs, :47 PATCH /api/tabs/{id} (label, hidden); web/src/workspace/FolderPicker.tsx -->
 
 ### Contents
 
@@ -52,7 +52,7 @@ browser / Flutter WebView ──HTTPS (your reverse proxy)──▶ roosterm (on
 <!-- evidence: docs/design.md:11-22; docs/hc-bridge.md:1 hc 0.1.21; web/package.json:15-16 react and @xterm/xterm dependencies -->
 
 roosterm does not terminate TLS itself: it listens on plain HTTP (default `127.0.0.1:8787`) and expects a reverse proxy for HTTPS.
-<!-- evidence: host/internal/config/config.go:17 DefaultListen; host/cmd/roosterm/serve.go:71 net.Listen("tcp") with no TLS; docs/api.md:15 "the reverse proxy terminates TLS" -->
+<!-- evidence: host/internal/config/config.go:17 DefaultListen; host/cmd/roosterm/serve.go:71 net.Listen("tcp") with no TLS; docs/api.md:16 "the reverse proxy terminates TLS" -->
 
 ### Requirements
 
@@ -60,7 +60,7 @@ roosterm does not terminate TLS itself: it listens on plain HTTP (default `127.0
   <!-- evidence: docs/design.md:18,35; deploy/README.md:3 -->
 - macOS or Linux host (Windows hosts are a non-goal). Service scripts exist for launchd (macOS) and systemd (Linux).
   <!-- evidence: docs/design.md:7; scripts/service.py:2,176-177; deploy/systemd/roosterm.service -->
-- To build: Go 1.26.4 (`host/go.mod`), Node and npm for the web client, Python 3 for the scripts.
+- To build: Go 1.26.11 (`host/go.mod`), Node and npm for the web client, Python 3 for the scripts.
   <!-- evidence: host/go.mod:3; scripts/build.py:39-45 npm ci, npm run build, go build -->
 - To build the Android app: the Flutter SDK (Dart `^3.12.2`).
   <!-- evidence: app/pubspec.yaml:8; app/README.md:5-8 -->
@@ -109,10 +109,10 @@ Both subcommands accept `--config PATH`; the default is `$XDG_CONFIG_HOME/rooste
 | `username` | set by `passwd` | The single login user |
 | `password_hash` | set by `passwd` | argon2id hash |
 
-<!-- evidence: host/internal/config/config.go:17-19 defaults, :39-45 toml keys, :71-72 unknown keys rejected, :105-108 absolute executable shell; docs/api.md:120-130 example file; docs/api.md:70 command omitted => [config.shell, "-l"] -->
+<!-- evidence: host/internal/config/config.go:17-19 defaults, :39-45 toml keys, :71-72 unknown keys rejected, :105-108 absolute executable shell; docs/api.md:123-133 example file; docs/api.md:73 command omitted => [config.shell, "-l"] -->
 
 Sessions are stored in `sessions.json` next to the config file (mode 0600).
-<!-- evidence: host/internal/config/config.go:61 SessionsPath; host/internal/auth/session.go:23,55 -->
+<!-- evidence: host/internal/config/config.go:61 SessionsPath; host/internal/auth/session.go:23,57 -->
 
 ### Run as a service
 
@@ -146,19 +146,25 @@ Log: `journalctl --user -u roosterm.service`.
 ### Using the clients
 
 **Web client.** Open the HTTPS URL of your reverse proxy and sign in. The sidebar lists your sessions; the new-session dialog offers Shell, Claude, or Swarm and a folder picker. Sessions can be renamed or hidden, and a finished session can be restarted or closed. Closing a tab kills a live process.
-<!-- evidence: web/src/screens/LoginScreen.tsx; web/src/workspace/Sessions.tsx; web/src/workspace/NewSessionDialog.tsx:25-31; docs/api.md:79-81 DELETE kills live then removes; web/src/terminal/TerminalPane.tsx -->
+<!-- evidence: web/src/screens/LoginScreen.tsx; web/src/workspace/Sessions.tsx; web/src/workspace/NewSessionDialog.tsx:25-31; docs/api.md:82-84 DELETE kills live then removes; web/src/terminal/TerminalPane.tsx -->
 
-**Android app.** Add a host (a name and an `https://` URL; plain `http` is rejected because the session cookie is `Secure`) and open it in the WebView. Android only.
-<!-- evidence: app/lib/hosts.dart:10-20; app/lib/host_page.dart:26-27 WebViewController; app/README.md:3 -->
+**Android app.** Add a host (a name and an `https://` URL; plain `http` is rejected because the session cookie is `Secure`) and open it in the WebView. The app loads only pages on the configured host's origin; links to other sites are blocked with a notice showing the address. Android only.
+<!-- evidence: app/lib/hosts.dart:10-20,25-32 sameOrigin; app/lib/host_page.dart:26-27 WebViewController; app/lib/host_page.dart:29-34 onNavigationRequest; app/README.md:3 -->
 
 ### Security notes
 
-- One account, argon2id password hash in `config.toml`. Login rate limit: 5 failures lock `/login` for 60 s (HTTP 429 with `Retry-After`); the limit is global, not per IP, and a successful login resets it.
-  <!-- evidence: host/internal/auth/ratelimit.go:8-10,13,23-24; docs/api.md:85-86 -->
+- One account, argon2id password hash in `config.toml`. Login rate limit: failures are counted in two buckets, one for browsers that carry the `roosterm_device` cookie and one for everyone else; 5 failures in a bucket lock `/login` for that bucket for 60 s (HTTP 429 with `Retry-After`), and a successful login resets it. The limit is not per IP.
+  <!-- evidence: host/internal/auth/ratelimit.go:8-10,13; host/internal/web/login.go:29-32 bucket choice; host/cmd/roosterm/serve.go:67 two limiters; docs/api.md:89 -->
+- Known-device cookie `roosterm_device`: set by a successful login with `Path=/login`, 400 days, HttpOnly, Secure, SameSite=Strict. It only selects the rate bucket and grants no access.
+  <!-- evidence: host/internal/web/login.go:54; host/internal/auth/cookie.go:14-16,28-30 -->
 - Session cookie `roosterm_session`: HttpOnly, Secure, SameSite=Strict; the server stores only the SHA-256 of the token. The sessions file must be mode 0600 or the server refuses it.
-  <!-- evidence: host/internal/auth/cookie.go:10-12; docs/api.md:12,13; host/internal/auth/session.go:55 -->
+  <!-- evidence: host/internal/auth/cookie.go:10-12,33-35; docs/api.md:12,13; host/internal/auth/session.go:57-58 -->
+- Changing the password logs every device out, but only after the server restarts: `sessions.json` records a digest of the password hash, and a server that starts with a different hash drops all sessions. After `roosterm passwd`, old sessions keep working until you restart `roosterm serve`. To log out all devices, run `roosterm passwd` again and restart. The first start after upgrading to this version logs everyone out once.
+  <!-- evidence: host/internal/auth/session.go:32,47-49,68; host/cmd/roosterm/serve.go:61; host/cmd/roosterm/passwd.go:28 -->
+- Cross-origin protection: a POST, PATCH or DELETE request (including `/login` and `/logout`) that the browser marks as coming from another origin is refused with 403, kind `cross_origin`. JSON bodies must have `Content-Type: application/json`, else 415. API clients without a browser must send that header.
+  <!-- evidence: host/internal/web/server.go:38,41-52 crossOriginGuard; host/internal/apierr/apierr.go:20,76-81 -->
 - What is exposed: tab REST endpoints, one WebSocket per tab, and directory listing under your home only (paths resolving outside home, including through symlinks, are refused with 403). Anyone who logs in gets a full shell as the roosterm user, so put it behind HTTPS and a strong password.
-  <!-- evidence: docs/api.md:30,83 outside_home -->
+  <!-- evidence: docs/api.md:33,86 outside_home -->
 - Programs started in a tab get a scrubbed environment: `TMUX`, `TMUX_PANE` and `CLAUDE*` variables inherited from the hc core are unset.
   <!-- evidence: host/internal/api/scrub.go:5-9 -->
 
