@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Roosterm app icon — D2 "Split Bridge" master (rounded plate + foreground). -->
+  <title>Roosterm</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22B0CF"/><stop offset="1" stop-color="#1650A6"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.18" cy="0.08" r="0.9">
+      <stop offset="0" stop-color="#fff" stop-opacity=".28"/>
+      <stop offset=".55" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="g-paper" x1="0" y1="0" x2=".6" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#D4E4F8"/>
+    </linearGradient>
+    <linearGradient id="g-cyan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6FF2DC"/><stop offset="1" stop-color="#27BFEA"/>
+    </linearGradient>
+    <filter id="f-soft" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#06173A" flood-opacity=".32"/>
+    </filter>
+    <filter id="f-lift" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#06173A" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#sheen)"/>
+  <!-- right column: two stacked host panes -->
+  <rect x="268" y="120" width="124" height="124" rx="30" fill="#fff" fill-opacity=".30"/>
+  <rect x="269" y="121" width="122" height="122" rx="29" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width="2"/>
+  <rect x="268" y="268" width="124" height="124" rx="30" fill="#fff" fill-opacity=".17"/>
+  <rect x="269" y="269" width="122" height="122" rx="29" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="2"/>
+  <rect x="296" y="158" width="64" height="10" rx="5" fill="#fff" fill-opacity=".75"/>
+  <rect x="296" y="182" width="42" height="10" rx="5" fill="#fff" fill-opacity=".55"/>
+  <rect x="296" y="306" width="54" height="10" rx="5" fill="#fff" fill-opacity=".5"/>
+  <!-- left: tall active pane (the handheld) -->
+  <g filter="url(#f-soft)">
+    <rect x="120" y="120" width="124" height="272" rx="30" fill="url(#g-paper)"/>
+  </g>
+  <path d="M152 166l28 22-28 22" fill="none" stroke="#1650A6" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M192 208h28" stroke="#1650A6" stroke-width="15" stroke-linecap="round"/>
+  <rect x="152" y="300" width="60" height="10" rx="5" fill="#AFC9EC"/>
+  <rect x="152" y="324" width="40" height="10" rx="5" fill="#AFC9EC"/>
+  <!-- the bridge: plugs into the split junction -->
+  <g filter="url(#f-lift)">
+    <rect x="214" y="241" width="90" height="30" rx="15" fill="url(#g-cyan)"/>
+  </g>
+  <circle cx="232" cy="256" r="6" fill="#0C2148" fill-opacity=".55"/>
+  <circle cx="286" cy="256" r="6" fill="#0C2148" fill-opacity=".55"/>
+</svg>

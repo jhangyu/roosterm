@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <clipPath id="clip-rr"><rect width="512" height="512" rx="112"/></clipPath>
+    <radialGradient id="g-sheen" cx="0.18" cy="0.08" r="0.9"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="g-paper" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#D4E4F8"/></linearGradient>
+    <linearGradient id="g-navy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1C3F7C"/><stop offset="1" stop-color="#0C2148"/></linearGradient>
+    <linearGradient id="g-cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6FF2DC"/><stop offset="1" stop-color="#27BFEA"/></linearGradient>
+    <filter id="f-soft" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#06173A" flood-opacity=".32"/></filter>
+    <linearGradient id="d1-bg-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3D92FF"/><stop offset="1" stop-color="#1544AE"/></linearGradient>
+  </defs>
+  <g clip-path="url(#clip-rr)">
+    <rect width="512" height="512" fill="url(#d1-bg-g)"/>
+    <rect width="512" height="512" fill="url(#g-sheen)"/>
+  </g>
+  <g filter="url(#f-soft)"><rect x="176" y="120" width="224" height="184" rx="36" fill="url(#g-navy)"/></g>
+  <rect x="177" y="121" width="222" height="182" rx="35" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="2"/>
+  <path d="M266 178l34 26-34 26" fill="none" stroke="url(#g-cyan)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M318 232h36" stroke="#45D9E6" stroke-width="18" stroke-linecap="round"/>
+  <g filter="url(#f-soft)"><rect x="112" y="196" width="128" height="200" rx="30" fill="url(#g-paper)"/></g>
+  <rect x="156" y="214" width="40" height="8" rx="4" fill="#9DB8DB"/>
+  <path d="M150 284l22 18-22 18" fill="none" stroke="#1F6FD6" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M184 320h20" stroke="#1F6FD6" stroke-width="12" stroke-linecap="round"/>
+  <rect x="160" y="370" width="32" height="6" rx="3" fill="#9DB8DB"/>
+</svg>
