@@ -110,10 +110,7 @@ func AttachArgv(dir, name string) ([]string, error) {
 	return argv, nil
 }
 
-// IsAttachArgv reports whether argv is the plain swarm attach `tmux -L claude-swarm-* a` and returns the socket name.
-func IsAttachArgv(argv []string) (name string, ok bool) {
-	if len(argv) == 4 && argv[0] == "tmux" && argv[1] == "-L" && strings.HasPrefix(argv[2], Prefix) && argv[3] == "a" {
-		return argv[2], true
-	}
-	return "", false
+// IsName reports whether name is a bare swarm socket name (Prefix, no path separators).
+func IsName(name string) bool {
+	return strings.HasPrefix(name, Prefix) && filepath.Base(name) == name
 }

@@ -79,7 +79,8 @@ func (s *server) listTabs(w http.ResponseWriter, r *http.Request) *apierr.Error 
 type createRequest struct {
 	Command []string `json:"command"`
 	Label   *string  `json:"label"`
-	Cwd     string   `json:"cwd"` // relative to home
+	Cwd     string   `json:"cwd"`   // relative to home
+	Swarm   string   `json:"swarm"` // claude-swarm-* socket name; excludes command and cwd
 }
 
 func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error {
@@ -89,7 +90,18 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error
 		return e
 	}
 	argv := []string{s.o.Shell, "-l"}
-	if req.Command != nil {
+	if req.Swarm != "" {
+		if req.Command != nil || req.Cwd != "" {
+			return apierr.BadRequest(op, "", `swarm: expected no "command" or "cwd" together with "swarm", got both`)
+		}
+		if !swarm.IsName(req.Swarm) {
+			return apierr.BadRequest(op, "", fmt.Sprintf(`swarm: expected a socket name starting with "claude-swarm-" and without "/", got %q`, req.Swarm))
+		}
+		var err error
+		if argv, err = swarm.AttachArgv(s.o.SwarmDir, req.Swarm); err != nil {
+			return apierr.Internal(op, "", err.Error())
+		}
+	} else if req.Command != nil {
 		argv = req.Command
 		if len(argv) == 0 {
 			return apierr.BadRequest(op, "", "command: expected a non-empty array of non-empty strings, got []")
@@ -100,12 +112,6 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error
 			}
 		}
 	}
-	if name, ok := swarm.IsAttachArgv(argv); ok {
-		var err error
-		if argv, err = swarm.AttachArgv(s.o.SwarmDir, name); err != nil {
-			return apierr.Internal(op, "", err.Error())
-		}
-	}
 	cwd, home, e := s.resolveDir(op, req.Cwd)
 	if e != nil {
 		return e
@@ -113,6 +119,9 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error
 	label := "~"
 	if cwd != home {
 		label = filepath.Base(cwd)
+	}
+	if req.Swarm != "" {
+		label = req.Swarm
 	}
 	if req.Label != nil {
 		label = *req.Label

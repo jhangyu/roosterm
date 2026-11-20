@@ -100,16 +100,34 @@ func TestCreateTabDefaultShell(t *testing.T) {
 func TestCreateTabCommandAndLabel(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
-	rec := e.do("POST", "/api/tabs", `{"command":["tmux","-L","other-4242","a"],"label":"swarm 4242"}`)
+	rec := e.do("POST", "/api/tabs", `{"command":["vim","notes.txt"],"label":"notes"}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create: expected 201, got %d %s", rec.Code, rec.Body)
 	}
-	if tab := decode[api.Tab](t, rec); tab.Label != "swarm 4242" {
+	if tab := decode[api.Tab](t, rec); tab.Label != "notes" {
 		t.Fatalf("label: got %q", tab.Label)
 	}
 	term, _ := e.fake.Get("t1")
-	if !slices.Equal(term.Argv, api.ScrubArgv([]string{"tmux", "-L", "other-4242", "a"})) {
+	if !slices.Equal(term.Argv, api.ScrubArgv([]string{"vim", "notes.txt"})) {
 		t.Fatalf("argv: got %v", term.Argv)
+	}
+}
+
+func TestCreateTabSwarmBadRequest(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	for _, body := range []string{
+		`{"swarm":"x"}`,
+		`{"swarm":"claude-swarm-1/../y"}`,
+		`{"swarm":"claude-swarm-1","command":["sh"]}`,
+		`{"swarm":"claude-swarm-1","cwd":"p"}`,
+	} {
+		if rec := e.do("POST", "/api/tabs", body); rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: expected 400, got %d %s", body, rec.Code, rec.Body)
+		}
+	}
+	if _, ok := e.fake.Get("t1"); ok {
+		t.Fatal("expected no terminal created")
 	}
 }
 
