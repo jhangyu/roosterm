@@ -56,9 +56,10 @@ params: {"argv":["/bin/zsh","-l"],"cwd":"/Users/me","size":{"cols":120,"rows":40
          "labels":{"roosterm":"tab","roosterm.name":"shell"},"no_parent":true}
 result: Terminal record (below); "address":"t7", "pid":12345, "state":"live"
 ```
+- roosterm wraps `argv` with `ScrubArgv` (`host/internal/api/scrub.go`, see §7): `/bin/sh -c '<unset vars>; exec "$@"' sh <argv…>`, so the example's argv is the inner command.
 - `argv` empty and `line` absent → the machine's `$SHELL` without `-l`. Roosterm always sends an explicit `argv`.
 - `line` (string) runs via `sh -c`; roosterm uses `argv` only.
-- `cwd` default is the **core's** cwd → roosterm always sends `$HOME`.
+- `cwd` default is the **core's** cwd → roosterm always sends the folder the client chose under home (home when none; `resolveDir`, `host/internal/api/dirs.go`).
 - `size` default 200×120 until a viewer attaches.
 - `no_parent: true` always (roosterm is not inside an hc terminal; avoids parent notes).
 - `name` must match `[a-z0-9_.-]{1,32}` and be unique among live terminals; roosterm does not use `name` (tab titles go in a label).
@@ -126,7 +127,7 @@ Roosterm → core on the channel:
 - Detach: CLOSE with empty payload; the core answers with an empty CLOSE.
 
 ### terminal.send — NOT used for keystrokes
-`{"terminal":"t5","text":"echo SENT-VIA-RPC"}` pastes the text and presses Enter (`result: {"started":null,"status":null,"turn":0}`). It is for agents, not for a keyboard. The design spec's "binary frame → terminal.send" is replaced by "binary frame → DATA on the attach channel".
+`{"terminal":"t5","text":"echo SENT-VIA-RPC"}` pastes the text and presses Enter (`result: {"started":null,"status":null,"turn":0}`). It is for agents, not for a keyboard. Client keyboard binary frames go as DATA on the attach channel instead.
 
 ### events.subscribe — not needed by the bridge
 Framed reply `{"channel":1,"seq":15,"terminals":[…]}`; then each notification is one DATA frame on that channel containing a JSON-RPC notification (`{"jsonrpc":"2.0","method":"event","params":{"seq":…,"type":"size","terminal":"t5","data":{"cols":90,"rows":20}}}`; types seen: created, labels, size, foreground, finished, removed). Exit is already delivered by the attach CLOSE frame, so roosterm does not subscribe.

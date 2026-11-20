@@ -2,19 +2,6 @@
 
 This file is the living contract. Code wins on conflict, and this file must be fixed when they differ.
 
-## Deviations from the design spec
-
-hc wire facts in `docs/hc-bridge.md` win over the spec where they differ.
-
-| Spec text (`docs/superpowers/specs/2026-11-19-roosterm-design.md`) | Implemented | Source |
-|---|---|---|
-| line 72: keyboard binary frame → `terminal.send` | binary frame → DATA frame on the attach channel | `docs/hc-bridge.md` §4 "terminal.send — NOT used" |
-| line 72: window size via JSON control message | client still sends JSON `{"type":"resize"}`; the server sends an hc RESIZE frame | `docs/hc-bridge.md` §3, §4 |
-| line 70: `DELETE /api/tabs/{id}` → `terminal.kill` | live → `terminal.kill` then `terminal.rm`; finished → `terminal.rm` (a killed record would otherwise stay in the list 24 h) | `docs/hc-bridge.md` §4 terminal.rm |
-| line 64: socket dir `$TMUX_TMPDIR`, else `/tmp/tmux-<uid>` | `${TMUX_TMPDIR:-/tmp}/tmux-<uid>` (tmux appends `tmux-<uid>` to `TMUX_TMPDIR` too) | man tmux |
-| line 101: config fields | adds `shell` (under launchd `SHELL` is unset, so `roosterm passwd` records `$SHELL` once from the user's interactive shell) | — |
-| line 102: hc autostart "after spike item 4" | launchd/systemd unit runs idempotent `hc server start`, then `roosterm serve`; never `hc server stop` | `docs/hc-bridge.md` §5 |
-
 ## Overview
 
 All paths are same-origin. JSON bodies are UTF-8, `Content-Type: application/json`. Request bodies are limited to 64 KiB (413, kind `bad_request`). Unknown JSON fields are rejected (400).
