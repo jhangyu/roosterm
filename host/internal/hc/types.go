@@ -19,7 +19,6 @@ type Terminal struct {
 	Reason    *string           `json:"reason"`
 	ExitCode  *int              `json:"exit_code"`
 	Signal    *int              `json:"signal"`
-	PID       *int              `json:"pid"`
 	Cwd       string            `json:"cwd"`
 	CreatedMS int64             `json:"created_ms"`
 	Cols      uint16            `json:"cols"`

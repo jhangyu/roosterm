@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	firstPID   = 1000
 	chanBuffer = 64
 	errCode    = -32000
 	sigHUP     = 1
@@ -332,18 +331,11 @@ func (f *Fake) rpc(fc *fakeConn, payload []byte) {
 	if err := json.Unmarshal(payload, &req); err != nil {
 		panic(fmt.Sprintf("hctest: bad request %q: %v", payload, err))
 	}
-	var p struct {
-		hc.RunParams
-		Terminal string            `json:"terminal"`
-		All      bool              `json:"all"`
-		Cols     uint16            `json:"cols"`
-		Rows     uint16            `json:"rows"`
-		Labels   map[string]string `json:"labels"`
-	}
+	var p rpcParams
 	if err := json.Unmarshal(req.Params, &p); err != nil {
 		panic(fmt.Sprintf("hctest: bad params %q: %v", req.Params, err))
 	}
-	result, rerr, after := f.dispatch(fc, req.Method, p.RunParams, p.Terminal, p.All, p.Labels, hc.Size{Cols: p.Cols, Rows: p.Rows})
+	result, rerr, after := f.dispatch(fc, req.Method, p)
 	msg := map[string]any{"jsonrpc": "2.0", "id": req.ID}
 	if rerr != nil {
 		msg["error"] = rerr
@@ -360,8 +352,18 @@ func (f *Fake) rpc(fc *fakeConn, payload []byte) {
 	}
 }
 
+// rpcParams is the union of every method's params; RunParams.Labels is shadowed by Labels.
+type rpcParams struct {
+	hc.RunParams
+	Terminal string            `json:"terminal"`
+	All      bool              `json:"all"`
+	Cols     uint16            `json:"cols"`
+	Rows     uint16            `json:"rows"`
+	Labels   map[string]string `json:"labels"`
+}
+
 // dispatch returns the result or error, and an action to run after the reply is written.
-func (f *Fake) dispatch(fc *fakeConn, method string, run hc.RunParams, id string, all bool, labels map[string]string, size hc.Size) (any, *rpcErr, func()) {
+func (f *Fake) dispatch(fc *fakeConn, method string, p rpcParams) (any, *rpcErr, func()) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if e, ok := f.fail[method]; ok {
@@ -377,11 +379,10 @@ func (f *Fake) dispatch(fc *fakeConn, method string, run hc.RunParams, id string
 	switch method {
 	case "terminal.run":
 		f.runs++
-		pid := firstPID + f.runs
-		// run.Labels is shadowed by the outer "labels" field; labels carries it.
-		t := hc.Terminal{Address: fmt.Sprintf("t%d", f.runs), Argv: run.Argv, Labels: map[string]string{}, State: hc.StateLive,
-			PID: &pid, Cwd: run.Cwd, CreatedMS: int64(f.runs), Cols: run.Size.Cols, Rows: run.Size.Rows}
-		for k, v := range labels {
+		// p.RunParams.Labels is shadowed by the outer "labels" field; p.Labels carries it.
+		t := hc.Terminal{Address: fmt.Sprintf("t%d", f.runs), Argv: p.RunParams.Argv, Labels: map[string]string{}, State: hc.StateLive,
+			Cwd: p.RunParams.Cwd, CreatedMS: int64(f.runs), Cols: p.RunParams.Size.Cols, Rows: p.RunParams.Size.Rows}
+		for k, v := range p.Labels {
 			t.Labels[k] = v
 		}
 		f.terms[t.Address] = t
@@ -389,11 +390,11 @@ func (f *Fake) dispatch(fc *fakeConn, method string, run hc.RunParams, id string
 	case "terminal.list":
 		out := []hc.Terminal{}
 		for _, t := range f.terms {
-			if t.State == hc.StateFinished && !all {
+			if t.State == hc.StateFinished && !p.All {
 				continue
 			}
 			match := true
-			for k, v := range labels {
+			for k, v := range p.Labels {
 				if t.Labels[k] != v {
 					match = false
 				}
@@ -404,9 +405,9 @@ func (f *Fake) dispatch(fc *fakeConn, method string, run hc.RunParams, id string
 		}
 		return map[string]any{"terminals": out, "hidden_finished": 0, "machines": []any{}}, nil, nil
 	}
-	t, ok := f.terms[id]
+	t, ok := f.terms[p.Terminal]
 	if !ok {
-		return nil, notFound(id), nil
+		return nil, notFound(p.Terminal), nil
 	}
 	switch method {
 	case "terminal.get":
@@ -416,7 +417,7 @@ func (f *Fake) dispatch(fc *fakeConn, method string, run hc.RunParams, id string
 		for k, v := range t.Labels {
 			merged[k] = v
 		}
-		for k, v := range labels {
+		for k, v := range p.Labels {
 			if v == "" {
 				delete(merged, k)
 			} else {
@@ -424,30 +425,30 @@ func (f *Fake) dispatch(fc *fakeConn, method string, run hc.RunParams, id string
 			}
 		}
 		t.Labels = merged
-		f.terms[id] = t
+		f.terms[p.Terminal] = t
 		return t, nil, nil
 	case "terminal.kill":
 		reason, sig := "killed", sigHUP
 		// finish takes f.mu itself, so it runs after the reply, outside this lock
 		t.State, t.Reason, t.ExitCode, t.Signal = hc.StateFinished, &reason, nil, &sig
-		return t, nil, func() { f.finish(id, hc.Terminal{Reason: &reason, Signal: &sig}) }
+		return t, nil, func() { f.finish(p.Terminal, hc.Terminal{Reason: &reason, Signal: &sig}) }
 	case "terminal.rm":
 		if t.State != hc.StateFinished {
-			return nil, newErr("invalid_params", fmt.Sprintf("%s is live; kill it first", id), ""), nil
+			return nil, newErr("invalid_params", fmt.Sprintf("%s is live; kill it first", p.Terminal), ""), nil
 		}
-		delete(f.terms, id)
-		return map[string]string{"removed": id}, nil, nil
+		delete(f.terms, p.Terminal)
+		return map[string]string{"removed": p.Terminal}, nil, nil
 	case "terminal.attach":
 		if t.State == hc.StateFinished {
-			return nil, newErr(hc.KindFinished, id+" has finished", "read what it left: hc read "+id), nil
+			return nil, newErr(hc.KindFinished, p.Terminal+" has finished", "read what it left: hc read "+p.Terminal), nil
 		}
 		fc.nextChan++
 		ch := fc.nextChan
-		fc.streams[ch] = id
-		t.Cols, t.Rows = size.Cols, size.Rows
-		f.terms[id] = t
+		fc.streams[ch] = p.Terminal
+		t.Cols, t.Rows = p.Cols, p.Rows
+		f.terms[p.Terminal] = t
 		return map[string]any{"channel": ch, "automatic_input": true, "resize_notifications": false, "terminal": t}, nil,
-			func() { fc.write(hc.Frame{Channel: ch, Kind: hc.KindData, Payload: Paint(id)}) }
+			func() { fc.write(hc.Frame{Channel: ch, Kind: hc.KindData, Payload: Paint(p.Terminal)}) }
 	}
 	return nil, newErr("invalid_params", "hctest: method not implemented: "+method, ""), nil
 }

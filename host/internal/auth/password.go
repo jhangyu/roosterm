@@ -41,13 +41,8 @@ func NewSalt() ([]byte, error) {
 	return s, nil
 }
 
-// HashPassword hashes with DefaultCost.
-func HashPassword(password string, salt []byte) string {
-	return HashPasswordCost(password, salt, DefaultCost)
-}
-
-// HashPasswordCost returns $argon2id$v=19$m=<KiB>,t=<n>,p=<n>$<salt>$<key> (raw std base64).
-func HashPasswordCost(password string, salt []byte, c Cost) string {
+// HashPassword returns $argon2id$v=19$m=<KiB>,t=<n>,p=<n>$<salt>$<key> (raw std base64).
+func HashPassword(password string, salt []byte, c Cost) string {
 	key := argon2.IDKey([]byte(password), salt, c.Time, c.MemoryKiB, c.Threads, argonKeyLen)
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s", argon2.Version, c.MemoryKiB, c.Time, c.Threads,
 		phcB64.EncodeToString(salt), phcB64.EncodeToString(key))

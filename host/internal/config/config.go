@@ -2,12 +2,15 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"roosterm/host/internal/atomicfile"
 )
 
 const (
@@ -118,52 +121,35 @@ func Save(path string, c Config) error {
 	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
 		return fmt.Errorf("config save %s: %w", path, err)
 	}
-	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMode)
-	if err != nil {
-		return fmt.Errorf("config save %s: %w", path, err)
-	}
-	encErr := toml.NewEncoder(f).Encode(fileConfig{
+	var buf bytes.Buffer
+	err := toml.NewEncoder(&buf).Encode(fileConfig{
 		Listen: c.Listen, HCSocket: c.HCSocket, PingInterval: c.PingInterval.String(),
 		SessionTTL: c.SessionTTL.String(), Shell: c.Shell, Username: c.Username, PasswordHash: c.PasswordHash,
 	})
-	closeErr := f.Close()
-	if encErr != nil || closeErr != nil {
-		return fmt.Errorf("config save %s: encode: %v, close: %v", path, encErr, closeErr)
+	if err != nil {
+		return fmt.Errorf("config save %s: encode: %w", path, err)
 	}
-	if err := os.Chmod(tmp, fileMode); err != nil {
-		return fmt.Errorf("config save %s: %w", path, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := atomicfile.Write(path, buf.Bytes(), fileMode); err != nil {
 		return fmt.Errorf("config save %s: %w", path, err)
 	}
 	return nil
 }
 
-// SocketPath is hc_socket if set, else hc's own default rule.
+// SocketPath is hc_socket if set, else hc's own default rule (docs/hc-bridge.md §1).
 func (c Config) SocketPath() string {
 	if c.HCSocket != "" {
 		return c.HCSocket
 	}
-	return DefaultSocket(os.Getenv, os.Getuid(), dirExists)
-}
-
-// DefaultSocket applies hc's rule (docs/hc-bridge.md §1).
-func DefaultSocket(getenv func(string) string, uid int, dirExists func(string) bool) string {
-	if d := getenv("XDG_RUNTIME_DIR"); d != "" {
+	if d := os.Getenv("XDG_RUNTIME_DIR"); d != "" {
 		return filepath.Join(d, "herdr-core", "default.sock")
 	}
-	if run := fmt.Sprintf("/run/user/%d", uid); dirExists(run) {
+	run := fmt.Sprintf("/run/user/%d", os.Getuid())
+	if info, err := os.Stat(run); err == nil && info.IsDir() {
 		return filepath.Join(run, "herdr-core", "default.sock")
 	}
-	state := getenv("XDG_STATE_HOME")
+	state := os.Getenv("XDG_STATE_HOME")
 	if state == "" {
-		state = filepath.Join(getenv("HOME"), ".local", "state")
+		state = filepath.Join(os.Getenv("HOME"), ".local", "state")
 	}
 	return filepath.Join(state, "herdr-core", "default", "default.sock")
-}
-
-func dirExists(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && info.IsDir()
 }

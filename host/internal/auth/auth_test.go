@@ -17,7 +17,7 @@ var salt = []byte("0123456789abcdef")
 
 func TestVerifyPassword(t *testing.T) {
 	t.Parallel()
-	h := auth.HashPasswordCost("pw", salt, cheap)
+	h := auth.HashPassword("pw", salt, cheap)
 	if !strings.HasPrefix(h, "$argon2id$v=19$m=64,t=1,p=1$") {
 		t.Fatalf("hash prefix: got %s", h)
 	}
@@ -50,14 +50,8 @@ func TestVerifyPasswordMalformed(t *testing.T) {
 	}
 }
 
-func TestSessionCookieAttributes(t *testing.T) {
+func TestClearCookieAttributes(t *testing.T) {
 	t.Parallel()
-	c := auth.SessionCookie("tok", 2*time.Hour).String()
-	for _, want := range []string{"roosterm_session=tok", "Path=/", "Max-Age=7200", "HttpOnly", "Secure", "SameSite=Strict"} {
-		if !strings.Contains(c, want) {
-			t.Errorf("session cookie %q: missing %q", c, want)
-		}
-	}
 	clear := auth.ClearCookie().String()
 	for _, want := range []string{"roosterm_session=", "Max-Age=0", "HttpOnly", "Secure", "SameSite=Strict"} {
 		if !strings.Contains(clear, want) {

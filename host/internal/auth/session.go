@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"roosterm/host/internal/atomicfile"
 )
 
 const (
@@ -128,15 +130,8 @@ func (s *Sessions) saveLocked() error {
 	if err != nil {
 		return fmt.Errorf("sessions %s: encode: %w", s.path, err)
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, sessionFileMode); err != nil {
-		return fmt.Errorf("sessions %s: write: %w", s.path, err)
-	}
-	if err := os.Chmod(tmp, sessionFileMode); err != nil {
-		return fmt.Errorf("sessions %s: chmod: %w", s.path, err)
-	}
-	if err := os.Rename(tmp, s.path); err != nil {
-		return fmt.Errorf("sessions %s: rename: %w", s.path, err)
+	if err := atomicfile.Write(s.path, b, sessionFileMode); err != nil {
+		return fmt.Errorf("sessions %s: %w", s.path, err)
 	}
 	return nil
 }

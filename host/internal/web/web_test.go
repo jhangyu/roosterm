@@ -33,7 +33,7 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hash := auth.HashPasswordCost("pw", []byte("0123456789abcdef"), auth.Cost{Time: 1, MemoryKiB: 64, Threads: 1})
+	hash := auth.HashPassword("pw", []byte("0123456789abcdef"), auth.Cost{Time: 1, MemoryKiB: 64, Threads: 1})
 	e.h = web.New(web.Options{Username: "me", PasswordHash: hash, SessionTTL: sessionTTL, Sessions: sessions,
 		Limiter: auth.NewLimiter(clock),
 		API:     http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { e.apiCalls++ }),

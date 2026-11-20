@@ -59,7 +59,7 @@ func setPassword(path string, stdin *os.File, prompts io.Writer) error {
 		return err
 	}
 	cfg.Username = user
-	cfg.PasswordHash = auth.HashPassword(pw, salt)
+	cfg.PasswordHash = auth.HashPassword(pw, salt, auth.DefaultCost)
 	return config.Save(path, cfg)
 }
 
