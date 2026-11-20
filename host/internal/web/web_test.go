@@ -2,11 +2,13 @@ package web_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"roosterm/host/internal/auth"
@@ -213,5 +215,32 @@ func TestLogoutClearsSession(t *testing.T) {
 	}
 	if rec := e.do("GET", "/api/tabs", "", c, nil); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("after logout: expected 401, got %d", rec.Code)
+	}
+}
+
+// static.go serves the SPA with http.ServeFileFS on the unchanged request, without a session check.
+// Go >= 1.26.9 ignores a Range header with more than 200 ranges (GO-2026-6609) and sends the full file.
+func TestServeFileFSIgnoresExcessiveRanges(t *testing.T) {
+	t.Parallel()
+	const size = 1024
+	const overLimitRanges = 201
+	files := fstest.MapFS{"index.html": {Data: make([]byte, size)}}
+	serve := func(rangeHeader string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Range", rangeHeader)
+		rec := httptest.NewRecorder()
+		http.ServeFileFS(rec, req, files, "index.html")
+		return rec
+	}
+	parts := make([]string, overLimitRanges)
+	for i := range parts {
+		parts[i] = fmt.Sprintf("%d-%d", i, i)
+	}
+	rec := serve("bytes=" + strings.Join(parts, ","))
+	if rec.Code != http.StatusOK || rec.Body.Len() != size {
+		t.Fatalf("%d ranges: expected 200 with %d-byte body, got %d with %d bytes", overLimitRanges, size, rec.Code, rec.Body.Len())
+	}
+	if rec := serve("bytes=0-0"); rec.Code != http.StatusPartialContent {
+		t.Fatalf("single range: expected 206, got %d", rec.Code)
 	}
 }
