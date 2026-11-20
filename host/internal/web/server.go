@@ -11,19 +11,23 @@ import (
 )
 
 type Options struct {
-	Username     string
-	PasswordHash string
-	SessionTTL   time.Duration
-	Sessions     *auth.Sessions
-	Limiter      *auth.Limiter
-	API          http.Handler // mounted at /api/
-	TabSocket    http.Handler // mounted at GET /ws/tabs/{id}
+	Username      string
+	PasswordHash  string
+	SessionTTL    time.Duration
+	Sessions      *auth.Sessions
+	Limiter       *auth.Limiter // anonymous clients
+	DeviceLimiter *auth.Limiter // browsers carrying the known-device cookie
+	API           http.Handler  // mounted at /api/
+	TabSocket     http.Handler  // mounted at GET /ws/tabs/{id}
 }
 
-type server struct{ o Options }
+type server struct {
+	o      Options
+	marker string
+}
 
 func New(o Options) http.Handler {
-	s := &server{o: o}
+	s := &server{o: o, marker: auth.DeviceMarker(o.PasswordHash)}
 	mux := http.NewServeMux()
 	mux.Handle("POST /login", apierr.HandlerFunc(s.login))
 	mux.Handle("POST /logout", s.requireSession(apierr.HandlerFunc(s.logout)))

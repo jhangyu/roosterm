@@ -1,6 +1,7 @@
 package web
 
 import (
+	"crypto/hmac"
 	"crypto/subtle"
 	"fmt"
 	"math"
@@ -25,7 +26,11 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) *apierr.Error {
 	if req.Username == "" || req.Password == "" {
 		return apierr.BadRequest(op, "", "username, password: expected non-empty strings, got an empty value")
 	}
-	if retry, ok := s.o.Limiter.Attempt(); !ok {
+	lim := s.o.Limiter
+	if c, err := r.Cookie(auth.DeviceCookieName); err == nil && hmac.Equal([]byte(c.Value), []byte(s.marker)) {
+		lim = s.o.DeviceLimiter
+	}
+	if retry, ok := lim.Attempt(); !ok {
 		secs := max(1, int(math.Ceil(retry.Seconds())))
 		w.Header().Set("Retry-After", strconv.Itoa(secs))
 		return &apierr.Error{Status: http.StatusTooManyRequests, Op: op, Kind: apierr.KindTooManyAttempts,
@@ -40,12 +45,13 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) *apierr.Error {
 	if !userOK || !passOK {
 		return apierr.Unauthorized(op, "wrong username or password")
 	}
-	s.o.Limiter.Succeed()
+	lim.Succeed()
 	token, err := s.o.Sessions.Create()
 	if err != nil {
 		return apierr.Internal(op, "", err.Error())
 	}
 	http.SetCookie(w, auth.SessionCookie(token, s.o.SessionTTL))
+	http.SetCookie(w, auth.DeviceCookie(s.marker))
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }
