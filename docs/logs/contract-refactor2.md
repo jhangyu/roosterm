@@ -45,7 +45,7 @@ Acceptance criteria (run from repo root; each must hold on main after round 2; 1
 21. `grep -c 'always sends `\$HOME`' docs/hc-bridge.md` → 0; `grep -c 'ScrubArgv' docs/hc-bridge.md` ≥ 1; `grep -c '"events"' host/internal/hc/client.go` → 1 (requirement kept).
 22. `test ! -e docs/research && test ! -e docs/superpowers && test -f docs/design.md && echo OK` → OK; `grep -rn 'superpowers\|design spec' docs/api.md docs/hc-bridge.md docs/design.md` → empty; `wc -l < docs/design.md` ≤ 45.
 23. `ls build` → exactly `roosterm` and `roosterm-linux-arm64`; `test ! -e host/build && echo OK` → OK.
-24. Criterion 1 output lists tests from `host/internal/config` and `host/cmd/roosterm`.
+24. `cd host && go test -count=1 -v ./internal/config ./cmd/roosterm` → RC=0 and output has `--- PASS` lines for the new config and passwd tests; criterion 1 output shows `tests:` greater than 56 (amended by user 2026-11-21: test.py never lists test names).
 25. `git status --porcelain` → empty after each round's commits.
 
 Round budget: 3 rounds (2 planned + 1 repair). The repair round only fixes failures of these criteria; no new items.
