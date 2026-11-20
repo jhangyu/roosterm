@@ -86,7 +86,7 @@ Live ⇒ `terminal.kill` then `terminal.rm`; finished ⇒ `terminal.rm`.
 Lists the sub-directories of `path` (relative to home; empty = home), sorted by name; `hidden` is true for dot-names. Symlinks are listed only when they resolve to a directory inside home. Errors: 400 absolute path, `..` segment or NUL byte; 403 `outside_home` or `permission_denied`; 404 missing or not a directory.
 
 ### Login rate limit
-After 5 consecutive failures every `/login` returns 429 for 60 s; a success resets the count. Requests during lockout do not extend it and are not checked against the password. Failures are counted in two buckets: browsers that send a valid `roosterm_device` cookie, and everyone else; each bucket has its own count and lockout. The limit is not per IP.
+Failures are counted in two buckets: browsers that send a valid `roosterm_device` cookie, and everyone else. After 5 consecutive failures in a bucket, every `/login` from that bucket returns 429 for 60 s; the other bucket is not affected. A success resets the count of its bucket. Requests during lockout do not extend it and are not checked against the password. The limit is not per IP.
 
 ## WebSocket `/ws/tabs/{id}?cols=N&rows=N`
 

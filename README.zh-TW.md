@@ -23,7 +23,7 @@ roosterm 只是終端機外殼：它不解析 Claude Code，也沒有聊天介�
 - **單一獨立執行檔。** 網頁用戶端內嵌在 Go 執行檔中；執行時不需要 Docker、資料庫或 Node。
   <!-- evidence: host/internal/web/static.go:15 //go:embed all:dist; docs/design.md:22 -->
 - **資料夾選擇器與分頁管理。** 可瀏覽家目錄下的子資料夾，在該處開新分頁；分頁可改名，也可從分頁列隱藏（程式仍持續執行）。
-  <!-- evidence: docs/api.md:52 GET /api/dirs, :47 PATCH /api/tabs/{id} (label, hidden); web/src/workspace/FolderPicker.tsx -->
+  <!-- evidence: docs/api.md:52 GET /api/dirs, :50 PATCH /api/tabs/{id} (label, hidden); web/src/workspace/FolderPicker.tsx -->
 
 ### 目錄
 
@@ -146,7 +146,7 @@ loginctl enable-linger "$USER"   # 開機即啟動，不需登入工作階段
 ### 使用用戶端
 
 **網頁用戶端。** 開啟反向代理的 HTTPS 網址並登入。側邊欄列出你的工作階段；新增工作階段的對話框可選 Shell、Claude 或 Swarm，並提供資料夾選擇器。工作階段可改名或隱藏，已結束的工作階段可重新啟動或關閉。關閉分頁會終止仍在執行的程式。
-<!-- evidence: web/src/screens/LoginScreen.tsx; web/src/workspace/Sessions.tsx; web/src/workspace/NewSessionDialog.tsx:25-31; docs/api.md:82-84 DELETE kills live then removes; web/src/terminal/TerminalPane.tsx -->
+<!-- evidence: web/src/screens/LoginScreen.tsx; web/src/workspace/Sessions.tsx; web/src/workspace/NewSessionDialog.tsx:25-31; docs/api.md:82-83 DELETE kills live then removes; web/src/terminal/TerminalPane.tsx -->
 
 **Android App。** 新增主機（名稱加上 `https://` 網址；因為 session cookie 帶有 `Secure`，純 `http` 會被拒絕），再於 WebView 中開啟。App 只載入所設定主機同源的頁面；指向其他網站的連結會被擋下，並顯示該網址的提示。僅支援 Android。
 <!-- evidence: app/lib/hosts.dart:10-20,25-32 sameOrigin; app/lib/host_page.dart:26-27 WebViewController; app/lib/host_page.dart:29-34 onNavigationRequest; app/README.md:3 -->

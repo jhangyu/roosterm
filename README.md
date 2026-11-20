@@ -23,7 +23,7 @@ roosterm is a terminal shell only: it never parses Claude Code, and has no chat 
 - **Single self-contained binary.** The web client is embedded in the Go binary; no Docker, database or Node is needed at run time.
   <!-- evidence: host/internal/web/static.go:15 //go:embed all:dist; docs/design.md:22 -->
 - **Folder picker and tab management.** Browse sub-directories under your home to start a tab there; rename a tab or hide it from the tab strip while its process keeps running.
-  <!-- evidence: docs/api.md:52 GET /api/dirs, :47 PATCH /api/tabs/{id} (label, hidden); web/src/workspace/FolderPicker.tsx -->
+  <!-- evidence: docs/api.md:52 GET /api/dirs, :50 PATCH /api/tabs/{id} (label, hidden); web/src/workspace/FolderPicker.tsx -->
 
 ### Contents
 
@@ -146,7 +146,7 @@ Log: `journalctl --user -u roosterm.service`.
 ### Using the clients
 
 **Web client.** Open the HTTPS URL of your reverse proxy and sign in. The sidebar lists your sessions; the new-session dialog offers Shell, Claude, or Swarm and a folder picker. Sessions can be renamed or hidden, and a finished session can be restarted or closed. Closing a tab kills a live process.
-<!-- evidence: web/src/screens/LoginScreen.tsx; web/src/workspace/Sessions.tsx; web/src/workspace/NewSessionDialog.tsx:25-31; docs/api.md:82-84 DELETE kills live then removes; web/src/terminal/TerminalPane.tsx -->
+<!-- evidence: web/src/screens/LoginScreen.tsx; web/src/workspace/Sessions.tsx; web/src/workspace/NewSessionDialog.tsx:25-31; docs/api.md:82-83 DELETE kills live then removes; web/src/terminal/TerminalPane.tsx -->
 
 **Android app.** Add a host (a name and an `https://` URL; plain `http` is rejected because the session cookie is `Secure`) and open it in the WebView. The app loads only pages on the configured host's origin; links to other sites are blocked with a notice showing the address. Android only.
 <!-- evidence: app/lib/hosts.dart:10-20,25-32 sameOrigin; app/lib/host_page.dart:26-27 WebViewController; app/lib/host_page.dart:29-34 onNavigationRequest; app/README.md:3 -->
