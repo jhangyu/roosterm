@@ -1,24 +1,16 @@
 import type { ReactNode } from "react"
 import { ArrowClockwiseIcon, CheckmarkCircleIcon, DeleteIcon, PlugDisconnectedIcon, ServerIcon, WarningIcon } from "@/components/icons"
+import { BANNER, BANNER_TONES, BTN, BTN_PRIMARY } from "@/components/classes"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { TabEnd } from "@/api/types"
 import { endLabel, formatTime, type PaneState } from "./pane-state"
 
-// Mockup 3 `.banner`: padding 12/12/12/18, gap 14, radius-lg, 1px inset border + shadow-2, 14px below.
-const BANNER =
-  "mb-3.5 flex shrink-0 items-center gap-3.5 rounded-lg py-3 pr-3 pl-[18px]"
-const TONES = {
-  warn: "bg-warning-bg shadow-2 inset-ring inset-ring-warning-border",
-  error: "bg-destructive-bg shadow-2 inset-ring inset-ring-destructive-border",
-}
 const ICON_TONES = { warn: "text-warning", error: "text-destructive" }
-// Mockup 3 `.btn`: 36px high, 16px padding, 8px gap, radius-sm, 14/20 semibold.
-const ACTION = "h-9 gap-2 rounded-sm px-4 text-sm font-semibold"
 
-function Banner(props: { tone: keyof typeof TONES; icon: ReactNode; title: string; detail?: string; action?: ReactNode }) {
+function Banner(props: { tone: keyof typeof BANNER_TONES; icon: ReactNode; title: string; detail?: string; action?: ReactNode }) {
   return (
-    <div role="alert" className={cn(BANNER, TONES[props.tone])}>
+    <div role="alert" className={cn(BANNER, BANNER_TONES[props.tone], "mb-3.5")}>
       <span className={cn("grid", ICON_TONES[props.tone])}>{props.icon}</span>
       <div className="min-w-0 flex-1">
         <b className="mr-2 font-semibold">{props.title}</b>
@@ -36,7 +28,7 @@ type Props = { state: PaneState; onReconnect: () => void }
 // Rendered above the terminal card. The exited state is the card overlay `ExitPanel`, not a banner.
 export function StatusBanner({ state, onReconnect }: Props) {
   const reconnect = (
-    <Button type="button" className={ACTION} onClick={onReconnect}>
+    <Button type="button" className={BTN_PRIMARY} onClick={onReconnect}>
       <ArrowClockwiseIcon />
       Reconnect
     </Button>
@@ -112,11 +104,11 @@ export function ExitPanel({ end, onClose, onRestart }: { end: TabEnd; onClose: (
         <small className="text-xs text-muted-foreground">Scrollback is kept until you close this session.</small>
       </span>
       {onRestart && (
-        <Button type="button" variant="outline" className={cn(ACTION, "border-input bg-card")} onClick={onRestart}>
+        <Button type="button" variant="outline" className={BTN} onClick={onRestart}>
           Restart
         </Button>
       )}
-      <Button type="button" className={ACTION} onClick={onClose}>
+      <Button type="button" className={BTN_PRIMARY} onClick={onClose}>
         <DeleteIcon />
         Close session
       </Button>

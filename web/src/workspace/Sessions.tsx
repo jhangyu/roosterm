@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { endLabel } from "@/terminal/pane-state"
 import { isSwarm, tabParts, tabText } from "./tabs"
-import { BADGE, BADGE_IDLE, BADGE_RUN, ICON_BTN } from "./classes"
+import { BADGE, BADGE_IDLE, BADGE_RUN, ICON_BTN } from "@/components/classes"
 
 // .dot / .dot.live
 function Dot({ live, className }: { live: boolean; className?: string }) {

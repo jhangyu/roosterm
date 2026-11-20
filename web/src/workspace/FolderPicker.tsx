@@ -18,7 +18,7 @@ import {
   WarningIcon,
 } from "@/components/icons"
 import { Button } from "@/components/ui/button"
-import { BTN } from "./classes"
+import { BTN, KBD } from "@/components/classes"
 import { baseName, childPath, displayPath, folderView, matchRange, parentPath, segments } from "./folders"
 import type { FolderBrowser } from "./useFolderBrowser"
 
@@ -38,7 +38,6 @@ const MENU_INDENT_PX = 12
 // Phone: the menu spans the picker bar (20 px from each screen edge).
 const MENU_COLLISION_PX = 20
 const HIDDEN_NAMES_SHOWN = 3
-export const KBD = "rounded-xs border border-b-2 border-grey-88 bg-card px-[5px] font-mono text-[11px] text-grey-38"
 
 const STARTS_IN = {
   ok: { Icon: FolderOpenIcon, label: "Starts in", line: "text-muted-foreground", path: "text-foreground" },

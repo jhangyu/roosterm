@@ -1,4 +1,4 @@
-// Mockup 3 control recipes (docs/mockups/3-calm-surfaces.html "Controls"), layered over shadcn Button/Input.
+// Mockup 3 recipes shared by workspace/, screens/ and terminal/ (docs/mockups/3-calm-surfaces.html), layered over shadcn Button/Input.
 
 // .btn: 36px high, 0 16px, corner-small, 600 body text, 1px input border on card.
 export const BTN =
@@ -18,6 +18,16 @@ export const FIELD_INPUT =
 
 // Dialog and login field labels.
 export const FIELD_LABEL = "text-body leading-(--lh-body) font-semibold"
+
+// .banner: padding 12/12/12/18, gap 14, radius-lg, 1px inset border + shadow-2.
+export const BANNER = "flex shrink-0 items-center gap-3.5 rounded-lg py-3 pr-3 pl-[18px] shadow-2 inset-ring"
+export const BANNER_TONES = {
+  warn: "bg-warning-bg inset-ring-warning-border",
+  error: "bg-destructive-bg inset-ring-destructive-border",
+}
+
+// Keyboard-hint key cap.
+export const KBD = "rounded-xs border border-b-2 border-grey-88 bg-card px-[5px] font-mono text-[11px] text-grey-38"
 
 // .badge base + .run / .idle
 export const BADGE =

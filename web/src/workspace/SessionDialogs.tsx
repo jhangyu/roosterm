@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { BTN, BTN_DANGER, BTN_PRIMARY, DIALOG, FIELD_INPUT, FIELD_LABEL, ICON_BTN } from "./classes"
+import { BTN, BTN_DANGER, BTN_PRIMARY, DIALOG, FIELD_INPUT, FIELD_LABEL, ICON_BTN } from "@/components/classes"
 
 // docs/api.md "Label: 1–64 characters" (PATCH /api/tabs/{id}): the host returns 400 past it.
 const LABEL_MAX_CHARS = 64
