@@ -54,6 +54,9 @@ func newEnv(t *testing.T) *env {
 
 func (e *env) do(method, target, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequestWithContext(e.t.Context(), method, target, strings.NewReader(body))
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	rec := httptest.NewRecorder()
 	e.h.ServeHTTP(rec, req)
 	return rec
@@ -234,14 +237,14 @@ func TestCreateTabRejectsBadInput(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t)
 	cases := map[string]int{
-		`{"command":[]}`:                              http.StatusBadRequest,
-		`{"command":["sh",""]}`:                       http.StatusBadRequest,
-		`{"label":""}`:                                http.StatusBadRequest,
-		`{"label":"a\u0007"}`:                         http.StatusBadRequest,
+		`{"command":[]}`:        http.StatusBadRequest,
+		`{"command":["sh",""]}`: http.StatusBadRequest,
+		`{"label":""}`:          http.StatusBadRequest,
+		`{"label":"a\u0007"}`:   http.StatusBadRequest,
 		`{"label":"` + strings.Repeat("x", 65) + `"}`: http.StatusBadRequest,
-		`{"bogus":1}`:                                 http.StatusBadRequest,
-		`not json`:                                    http.StatusBadRequest,
-		`{} {}`:                                       http.StatusBadRequest,
+		`{"bogus":1}`: http.StatusBadRequest,
+		`not json`:    http.StatusBadRequest,
+		`{} {}`:       http.StatusBadRequest,
 		`{"label":"` + strings.Repeat("x", 70000) + `"}`: http.StatusRequestEntityTooLarge,
 	}
 	for body, want := range cases {
@@ -435,5 +438,33 @@ func TestScrubArgvDropsClaudeAndTmuxEnvKeepsRest(t *testing.T) {
 		if !slices.Contains(got, want) {
 			t.Fatalf("expected %q kept, got %v", want, got)
 		}
+	}
+}
+
+func TestCreateTabRequiresJSONContentType(t *testing.T) {
+	t.Parallel()
+	const body = `{"command":["/usr/bin/touch","/tmp/pwn"]}`
+	for _, ct := range []string{"text/plain", ""} {
+		e := newEnv(t)
+		req := httptest.NewRequestWithContext(t.Context(), "POST", "/api/tabs", strings.NewReader(body))
+		if ct != "" {
+			req.Header.Set("Content-Type", ct)
+		}
+		rec := httptest.NewRecorder()
+		e.h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnsupportedMediaType || decode[errBody](t, rec).Error.Kind != "bad_request" {
+			t.Fatalf("Content-Type %q: expected 415 bad_request, got %d %s", ct, rec.Code, rec.Body)
+		}
+		if _, ok := e.fake.Get("t1"); ok {
+			t.Fatalf("Content-Type %q: expected no terminal created", ct)
+		}
+	}
+	e := newEnv(t)
+	req := httptest.NewRequestWithContext(t.Context(), "POST", "/api/tabs", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	rec := httptest.NewRecorder()
+	e.h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("json with charset: expected 201, got %d %s", rec.Code, rec.Body)
 	}
 }

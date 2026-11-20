@@ -2,6 +2,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -30,7 +31,23 @@ func New(o Options) http.Handler {
 	mux.Handle("GET /ws/tabs/{id}", s.requireSession(o.TabSocket))
 	// "/" (all methods) rather than "GET /": "GET /" conflicts with "/api/" in Go 1.22+ routing.
 	mux.Handle("/", staticHandler())
-	return mux
+	return crossOriginGuard(mux)
+}
+
+// crossOriginGuard refuses state-changing requests a browser marks as not same-origin.
+// SameSite=Strict is per site, so a sibling subdomain or another localhost port still carries the cookie.
+// It uses Check, not Handler, to keep the JSON error body.
+func crossOriginGuard(next http.Handler) http.Handler {
+	cop := http.NewCrossOriginProtection()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := cop.Check(r); err != nil {
+			apierr.Write(w, apierr.Forbidden("cross_origin", fmt.Sprintf(
+				"%s %s refused: expected Sec-Fetch-Site same-origin or none, or Origin host equal to Host %q; got Sec-Fetch-Site %q, Origin %q: %v",
+				r.Method, r.URL.Path, r.Host, r.Header.Get("Sec-Fetch-Site"), r.Header.Get("Origin"), err)))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // requireSession runs before any WebSocket upgrade, so a handshake without a cookie gets HTTP 401.
