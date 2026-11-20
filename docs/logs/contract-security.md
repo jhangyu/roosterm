@@ -1,7 +1,7 @@
 # Contract: security campaign (2026-11-21)
 
 Base HEAD df3a695. Only the user may change this contract.
-Working files (scan reports, designs, one-time exploit checks) live in scratch/security/ and are deleted at signoff; the result and evidence go to docs/logs/2026-11-21-security.md.
+Working files (scan reports, designs, one-time exploit checks) live in the campaign scratch directory and are deleted at signoff; the result and evidence go to docs/logs/2026-11-21-security.md.
 
 End state: every confirmed vulnerability of severity Medium or higher found by the scan is fixed on main with a check that proves the exploit no longer works, and the end gate passes on main.
 
@@ -10,7 +10,7 @@ Process (user request):
 - Design: per confirmed vulnerability, 2 architects; output one agreed fix design.
 - Fix: per vulnerability, 1-3 implementers with file ownership boundaries.
 
-Confirmed findings (designs agreed by both architects, scratch/security/design-v1..v5.md): V1 same-site CSRF on state-changing endpoints (High); V2 global login lockout DoS (Medium); V3 password change does not revoke sessions (Medium); V4 Android WebView navigation not restricted to the host (Medium); V5 Go 1.26.4 Range-header CPU DoS, GO-2026-6609 (Medium).
+Confirmed findings (designs agreed by both architects): V1 same-site CSRF on state-changing endpoints (High); V2 global login lockout DoS (Medium); V3 password change does not revoke sessions (Medium); V4 Android WebView navigation not restricted to the host (Medium); V5 Go 1.26.4 Range-header CPU DoS, GO-2026-6609 (Medium).
 
 User decisions (2026-11-21):
 - V5: the user upgraded the machine Go with Homebrew (now go1.27.4); host/go.mod moves to `go 1.26.11`.
