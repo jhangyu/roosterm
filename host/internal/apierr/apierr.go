@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"mime"
 	"net/http"
 )
 
@@ -16,6 +17,7 @@ const (
 	KindTooManyAttempts = "too_many_attempts"
 	KindCoreOffline     = "core_offline"
 	KindInternal        = "internal"
+	KindCrossOrigin     = "cross_origin"
 )
 
 // maxBody is the largest accepted JSON request body.
@@ -36,6 +38,10 @@ func BadRequest(op, tab, msg string) *Error {
 
 func NotFound(op, tab, msg string) *Error {
 	return &Error{Status: http.StatusNotFound, Op: op, Tab: tab, Kind: KindNotFound, Message: msg}
+}
+
+func Forbidden(op, msg string) *Error {
+	return &Error{Status: http.StatusForbidden, Op: op, Kind: KindCrossOrigin, Message: msg}
 }
 
 func Unauthorized(op, msg string) *Error {
@@ -63,8 +69,17 @@ func Write(w http.ResponseWriter, e *Error) {
 }
 
 // DecodeJSON reads exactly one JSON object with only known fields into v.
-// Bodies over maxBody give 413; anything else malformed gives 400.
+// Bodies over maxBody give 413; a Content-Type other than application/json gives 415;
+// anything else malformed gives 400.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, op string, v any) *Error {
+	ct := r.Header.Get("Content-Type")
+	if mt, _, err := mime.ParseMediaType(ct); err != nil || mt != "application/json" {
+		msg := fmt.Sprintf("request Content-Type: expected application/json, got %q", ct)
+		if err != nil {
+			msg += fmt.Sprintf(": %v", err)
+		}
+		return &Error{Status: http.StatusUnsupportedMediaType, Op: op, Kind: KindBadRequest, Message: msg}
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()

@@ -215,3 +215,57 @@ func TestLogoutClearsSession(t *testing.T) {
 		t.Fatalf("after logout: expected 401, got %d", rec.Code)
 	}
 }
+
+func TestCrossOriginStateChangeRejected(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t)
+	c := e.loggedIn()
+	const cmd = `{"command":["/usr/bin/touch","/tmp/pwn"]}`
+	attacks := map[string]http.Header{
+		"same-site":   {"Sec-Fetch-Site": {"same-site"}, "Origin": {"https://blog.example.com"}, "Content-Type": {"text/plain"}},
+		"origin only": {"Origin": {"http://localhost:3000"}, "Content-Type": {"text/plain"}},
+		"null origin": {"Origin": {"null"}, "Content-Type": {"text/plain"}},
+	}
+	for name, h := range attacks {
+		rec := e.do("POST", "/api/tabs", cmd, c, h)
+		if rec.Code != http.StatusForbidden || errKind(t, rec) != "cross_origin" || e.apiCalls != 0 {
+			t.Fatalf("%s: expected 403 cross_origin and 0 API calls, got %d %s and %d calls", name, rec.Code, rec.Body, e.apiCalls)
+		}
+	}
+	site := http.Header{"Sec-Fetch-Site": {"same-site"}}
+	if rec := e.do("POST", "/logout", "", c, site); rec.Code != http.StatusForbidden || errKind(t, rec) != "cross_origin" {
+		t.Fatalf("cross-site logout: expected 403 cross_origin, got %d %s", rec.Code, rec.Body)
+	}
+	if rec := e.do("GET", "/api/tabs", "", c, nil); rec.Code != http.StatusOK {
+		t.Fatalf("after refused logout: expected session alive (200), got %d", rec.Code)
+	}
+	cross := func(pass string) *httptest.ResponseRecorder {
+		return e.do("POST", "/login", `{"username":"me","password":"`+pass+`"}`, nil, http.Header{"Sec-Fetch-Site": {"cross-site"}})
+	}
+	if rec := cross("pw"); rec.Code != http.StatusForbidden || rec.Header().Get("Set-Cookie") != "" {
+		t.Fatalf("cross-site login: expected 403 without cookie, got %d %q", rec.Code, rec.Header().Get("Set-Cookie"))
+	}
+	for range 5 {
+		cross("wrong")
+	}
+	if rec := e.login("me", "pw"); rec.Code != http.StatusNoContent {
+		t.Fatalf("login after cross-site failures: expected 204 (limiter untouched), got %d", rec.Code)
+	}
+
+	same := e.apiCalls
+	for name, h := range map[string]http.Header{
+		"same-origin": {"Sec-Fetch-Site": {"same-origin"}},
+		"origin=host": {"Origin": {"http://example.com"}},
+	} {
+		if rec := e.do("POST", "/api/tabs", cmd, c, h); rec.Code != http.StatusOK {
+			t.Fatalf("%s control: expected 200, got %d %s", name, rec.Code, rec.Body)
+		}
+		same++
+		if e.apiCalls != same {
+			t.Fatalf("%s control: expected API reached (%d calls), got %d", name, same, e.apiCalls)
+		}
+	}
+	if rec := e.do("GET", "/api/tabs", "", c, http.Header{"Sec-Fetch-Site": {"cross-site"}}); rec.Code != http.StatusOK {
+		t.Fatalf("cross-site GET: expected 200, got %d", rec.Code)
+	}
+}
