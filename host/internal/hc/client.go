@@ -295,17 +295,27 @@ func (c *Client) call(ctx context.Context, method, terminal string, attach bool,
 		}
 		return rep.stream, nil
 	case <-ctx.Done():
-		// ponytail: an attach reply arriving after this is dropped and its channel stays open on the
+		if !c.forget(id) {
+			// routeReply or shutdown already took the call; its single reply is (about to be) in the buffer.
+			if rep := <-pc.reply; rep.stream != nil {
+				if err := rep.stream.Close(); err != nil {
+					return nil, fmt.Errorf("hc %s: %w; detach of the abandoned stream: %v", method, ctx.Err(), err)
+				}
+			}
+		}
+		// ponytail: an attach reply arriving after forget is dropped and its channel stays open on the
 		// hc side until the connection ends; only happens when the caller's ctx ends mid-attach.
-		c.forget(id)
 		return nil, fmt.Errorf("hc %s: %w", method, ctx.Err())
 	}
 }
 
-func (c *Client) forget(id uint64) {
+// forget removes a pending call and reports whether it was still pending (false: a reply was already routed).
+func (c *Client) forget(id uint64) bool {
 	c.mu.Lock()
+	_, ok := c.pending[id]
 	delete(c.pending, id)
 	c.mu.Unlock()
+	return ok
 }
 
 type terminalRef struct {

@@ -135,8 +135,8 @@ func Save(path string, c Config) error {
 	return nil
 }
 
-// SocketPath is hc_socket if set, else hc's own default rule (docs/hc-bridge.md §1).
-func (c Config) SocketPath() string {
+// SocketPath is hc_socket if set, else hc's own default rule (docs/hc-bridge.md §1) under home.
+func (c Config) SocketPath(home string) string {
 	if c.HCSocket != "" {
 		return c.HCSocket
 	}
@@ -149,7 +149,7 @@ func (c Config) SocketPath() string {
 	}
 	state := os.Getenv("XDG_STATE_HOME")
 	if state == "" {
-		state = filepath.Join(os.Getenv("HOME"), ".local", "state")
+		state = filepath.Join(home, ".local", "state")
 	}
 	return filepath.Join(state, "herdr-core", "default", "default.sock")
 }

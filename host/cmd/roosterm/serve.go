@@ -47,9 +47,13 @@ func serveConfig(path string, stdout io.Writer) error {
 	if _, err := auth.VerifyPassword(cfg.PasswordHash, ""); err != nil {
 		return fmt.Errorf("config %s: password_hash: %w", path, err)
 	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("home directory: %w", err)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	socket := cfg.SocketPath()
+	socket := cfg.SocketPath(home)
 	sup, err := hc.Start(ctx, socket)
 	if err != nil {
 		return err
@@ -57,10 +61,6 @@ func serveConfig(path string, stdout io.Writer) error {
 	sessions, err := auth.OpenSessions(config.SessionsPath(path), cfg.SessionTTL, time.Now)
 	if err != nil {
 		return errors.Join(err, sup.Close())
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return errors.Join(fmt.Errorf("home directory: %w", err), sup.Close())
 	}
 	h := web.New(web.Options{
 		Username: cfg.Username, PasswordHash: cfg.PasswordHash, SessionTTL: cfg.SessionTTL,

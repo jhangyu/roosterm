@@ -20,7 +20,7 @@ func passwd(args []string, stdin *os.File, stdout, stderr io.Writer) int {
 	if !ok {
 		return code
 	}
-	if err := setPassword(path, stdin, stderr); err != nil {
+	if err := setPassword(path, stdin, stderr, auth.DefaultCost); err != nil {
 		fmt.Fprintf(stderr, "roosterm passwd: %v\n", err)
 		return exitError
 	}
@@ -28,7 +28,8 @@ func passwd(args []string, stdin *os.File, stdout, stderr io.Writer) int {
 	return exitOK
 }
 
-func setPassword(path string, stdin *os.File, prompts io.Writer) error {
+// setPassword takes the hash cost so tests can use a cheap one.
+func setPassword(path string, stdin *os.File, prompts io.Writer, cost auth.Cost) error {
 	cfg, err := loadOrNew(path)
 	if err != nil {
 		return err
@@ -59,7 +60,7 @@ func setPassword(path string, stdin *os.File, prompts io.Writer) error {
 		return err
 	}
 	cfg.Username = user
-	cfg.PasswordHash = auth.HashPassword(pw, salt, auth.DefaultCost)
+	cfg.PasswordHash = auth.HashPassword(pw, salt, cost)
 	return config.Save(path, cfg)
 }
 
