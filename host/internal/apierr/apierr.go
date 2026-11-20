@@ -18,8 +18,8 @@ const (
 	KindInternal        = "internal"
 )
 
-// MaxBody is the largest accepted JSON request body.
-const MaxBody = 64 << 10
+// maxBody is the largest accepted JSON request body.
+const maxBody = 64 << 10
 
 type Error struct {
 	Status  int    `json:"-"`
@@ -30,11 +30,29 @@ type Error struct {
 	Hint    string `json:"hint,omitempty"`
 }
 
-func (e *Error) Error() string {
-	if e.Tab == "" {
-		return fmt.Sprintf("%s: %s (kind %s)", e.Op, e.Message, e.Kind)
+func BadRequest(op, tab, msg string) *Error {
+	return &Error{Status: http.StatusBadRequest, Op: op, Tab: tab, Kind: KindBadRequest, Message: msg}
+}
+
+func NotFound(op, tab, msg string) *Error {
+	return &Error{Status: http.StatusNotFound, Op: op, Tab: tab, Kind: KindNotFound, Message: msg}
+}
+
+func Unauthorized(op, msg string) *Error {
+	return &Error{Status: http.StatusUnauthorized, Op: op, Kind: KindUnauthorized, Message: msg}
+}
+
+func Internal(op, tab, msg string) *Error {
+	return &Error{Status: http.StatusInternalServerError, Op: op, Tab: tab, Kind: KindInternal, Message: msg}
+}
+
+// HandlerFunc is an endpoint that returns its error instead of writing it. It returns non-nil only before writing anything.
+type HandlerFunc func(http.ResponseWriter, *http.Request) *Error
+
+func (f HandlerFunc) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if e := f(w, r); e != nil {
+		Write(w, e)
 	}
-	return fmt.Sprintf("%s %s: %s (kind %s)", e.Op, e.Tab, e.Message, e.Kind)
 }
 
 // Write sends e as {"error": e} with status e.Status.
@@ -49,23 +67,21 @@ func Write(w http.ResponseWriter, e *Error) {
 }
 
 // DecodeJSON reads exactly one JSON object with only known fields into v.
-// Bodies over MaxBody give 413; anything else malformed gives 400.
+// Bodies over maxBody give 413; anything else malformed gives 400.
 func DecodeJSON(w http.ResponseWriter, r *http.Request, op string, v any) *Error {
-	r.Body = http.MaxBytesReader(w, r.Body, MaxBody)
+	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
 			return &Error{Status: http.StatusRequestEntityTooLarge, Op: op, Kind: KindBadRequest,
-				Message: fmt.Sprintf("request body: expected at most %d bytes, got more", MaxBody)}
+				Message: fmt.Sprintf("request body: expected at most %d bytes, got more", maxBody)}
 		}
-		return &Error{Status: http.StatusBadRequest, Op: op, Kind: KindBadRequest,
-			Message: fmt.Sprintf("request body: expected one JSON object with known fields, got %v", err)}
+		return BadRequest(op, "", fmt.Sprintf("request body: expected one JSON object with known fields, got %v", err))
 	}
 	if dec.More() {
-		return &Error{Status: http.StatusBadRequest, Op: op, Kind: KindBadRequest,
-			Message: "request body: expected one JSON object, got trailing data"}
+		return BadRequest(op, "", "request body: expected one JSON object, got trailing data")
 	}
 	return nil
 }

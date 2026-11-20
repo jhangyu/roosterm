@@ -24,8 +24,8 @@ type server struct{ o Options }
 func New(o Options) http.Handler {
 	s := &server{o: o}
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /login", s.login)
-	mux.Handle("POST /logout", s.requireSession(http.HandlerFunc(s.logout)))
+	mux.Handle("POST /login", apierr.HandlerFunc(s.login))
+	mux.Handle("POST /logout", s.requireSession(apierr.HandlerFunc(s.logout)))
 	mux.Handle("/api/", s.requireSession(o.API))
 	mux.Handle("GET /ws/tabs/{id}", s.requireSession(o.TabSocket))
 	// "/" (all methods) rather than "GET /": "GET /" conflicts with "/api/" in Go 1.22+ routing.
@@ -38,8 +38,7 @@ func (s *server) requireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(auth.CookieName) // only error: http.ErrNoCookie
 		if err != nil || !s.o.Sessions.Valid(c.Value) {
-			apierr.Write(w, &apierr.Error{Status: http.StatusUnauthorized, Op: "session",
-				Kind: apierr.KindUnauthorized, Message: "missing or expired session cookie"})
+			apierr.Write(w, apierr.Unauthorized("session", "missing or expired session cookie"))
 			return
 		}
 		next.ServeHTTP(w, r)

@@ -19,10 +19,6 @@ const maxLabelLen = 64
 
 var initialSize = hc.Size{Cols: 80, Rows: 24}
 
-func badRequest(op, tab, msg string) *apierr.Error {
-	return &apierr.Error{Status: http.StatusBadRequest, Op: op, Tab: tab, Kind: apierr.KindBadRequest, Message: msg}
-}
-
 func checkLabel(op, tab, label string) *apierr.Error {
 	n := utf8.RuneCountInString(label)
 	ok := n >= 1 && n <= maxLabelLen
@@ -32,7 +28,7 @@ func checkLabel(op, tab, label string) *apierr.Error {
 		}
 	}
 	if !ok {
-		return badRequest(op, tab, fmt.Sprintf("label: expected 1..%d characters without control characters, got %q", maxLabelLen, label))
+		return apierr.BadRequest(op, tab, fmt.Sprintf("label: expected 1..%d characters without control characters, got %q", maxLabelLen, label))
 	}
 	return nil
 }
@@ -52,35 +48,32 @@ func owned(ctx context.Context, c *hc.Client, op, id string) (hc.Terminal, *apie
 		return hc.Terminal{}, hcError(op, id, err)
 	}
 	if !hc.IsTab(t) {
-		return hc.Terminal{}, &apierr.Error{Status: http.StatusNotFound, Op: op, Tab: id, Kind: apierr.KindNotFound,
-			Message: fmt.Sprintf("tab %s not found", id)}
+		return hc.Terminal{}, apierr.NotFound(op, id, fmt.Sprintf("tab %s not found", id))
 	}
 	return t, nil
 }
 
-func (s *server) listTabs(w http.ResponseWriter, r *http.Request) {
+func (s *server) listTabs(w http.ResponseWriter, r *http.Request) *apierr.Error {
 	const op = "tab.list"
 	c, e := s.client(op, "")
 	if e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	ts, err := c.List(r.Context(), map[string]string{hc.LabelOwner: hc.LabelOwnerTab})
 	if err != nil {
-		apierr.Write(w, hcError(op, "", err))
-		return
+		return hcError(op, "", err)
 	}
 	slices.SortStableFunc(ts, func(a, b hc.Terminal) int { return cmp.Compare(a.CreatedMS, b.CreatedMS) })
 	home, e := s.homeDir(op)
 	if e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	out := make([]Tab, 0, len(ts))
 	for _, t := range ts {
 		out = append(out, toTab(home, t))
 	}
 	apierr.WriteJSON(w, http.StatusOK, out)
+	return nil
 }
 
 type createRequest struct {
@@ -89,43 +82,33 @@ type createRequest struct {
 	Cwd     string   `json:"cwd"` // relative to home
 }
 
-func (s *server) createTab(w http.ResponseWriter, r *http.Request) {
+func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error {
 	const op = "tab.create"
 	var req createRequest
 	if e := apierr.DecodeJSON(w, r, op, &req); e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	argv := []string{s.o.Shell, "-l"}
 	if req.Command != nil {
 		argv = req.Command
 		if len(argv) == 0 {
-			apierr.Write(w, badRequest(op, "", "command: expected a non-empty array of non-empty strings, got []"))
-			return
+			return apierr.BadRequest(op, "", "command: expected a non-empty array of non-empty strings, got []")
 		}
 		for i, a := range argv {
 			if a == "" {
-				apierr.Write(w, badRequest(op, "", fmt.Sprintf("command[%d]: expected a non-empty string, got \"\"", i)))
-				return
+				return apierr.BadRequest(op, "", fmt.Sprintf("command[%d]: expected a non-empty string, got \"\"", i))
 			}
 		}
 	}
 	if name, ok := swarm.IsAttachArgv(argv); ok {
 		var err error
 		if argv, err = swarm.AttachArgv(s.o.SwarmDir, name); err != nil {
-			apierr.Write(w, &apierr.Error{Status: http.StatusInternalServerError, Op: op, Kind: apierr.KindInternal, Message: err.Error()})
-			return
+			return apierr.Internal(op, "", err.Error())
 		}
 	}
-	cwd, e := s.resolveDir(op, req.Cwd)
+	cwd, home, e := s.resolveDir(op, req.Cwd)
 	if e != nil {
-		apierr.Write(w, e)
-		return
-	}
-	home, e := s.homeDir(op)
-	if e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	label := "~"
 	if cwd != home {
@@ -135,25 +118,23 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) {
 		label = *req.Label
 	}
 	if e := checkLabel(op, "", label); e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	c, e := s.client(op, "")
 	if e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	t, err := c.Run(r.Context(), hc.RunParams{Argv: ScrubArgv(argv), Cwd: cwd, Size: initialSize, NoParent: true,
 		Labels: map[string]string{hc.LabelOwner: hc.LabelOwnerTab, hc.LabelName: label}})
 	if err != nil {
-		apierr.Write(w, hcError(op, "", err))
-		return
+		return hcError(op, "", err)
 	}
 	apierr.WriteJSON(w, http.StatusCreated, toTab(home, t))
+	return nil
 }
 
 // updateTab renames and/or hides a tab; hidden only drops it from clients' tab strips, the process keeps running.
-func (s *server) updateTab(w http.ResponseWriter, r *http.Request) {
+func (s *server) updateTab(w http.ResponseWriter, r *http.Request) *apierr.Error {
 	const op = "tab.update"
 	id := r.PathValue("id")
 	var req struct {
@@ -162,14 +143,12 @@ func (s *server) updateTab(w http.ResponseWriter, r *http.Request) {
 	}
 	if e := apierr.DecodeJSON(w, r, op, &req); e != nil {
 		e.Tab = id
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	labels := map[string]string{}
 	if req.Label != nil {
 		if e := checkLabel(op, id, *req.Label); e != nil {
-			apierr.Write(w, e)
-			return
+			return e
 		}
 		labels[hc.LabelName] = *req.Label
 		labels[hc.LabelRenamed] = hc.LabelRenamedOn
@@ -181,53 +160,46 @@ func (s *server) updateTab(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(labels) == 0 {
-		apierr.Write(w, badRequest(op, id, `body: expected at least one of "label" (string) or "hidden" (boolean), got neither`))
-		return
+		return apierr.BadRequest(op, id, `body: expected at least one of "label" (string) or "hidden" (boolean), got neither`)
 	}
 	c, e := s.client(op, id)
 	if e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	if _, e := owned(r.Context(), c, op, id); e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	t, err := c.Label(r.Context(), id, labels)
 	if err != nil {
-		apierr.Write(w, hcError(op, id, err))
-		return
+		return hcError(op, id, err)
 	}
 	home, e := s.homeDir(op)
 	if e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	apierr.WriteJSON(w, http.StatusOK, toTab(home, t))
+	return nil
 }
 
-func (s *server) closeTab(w http.ResponseWriter, r *http.Request) {
+func (s *server) closeTab(w http.ResponseWriter, r *http.Request) *apierr.Error {
 	const op = "tab.close"
 	id := r.PathValue("id")
 	c, e := s.client(op, id)
 	if e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	t, e := owned(r.Context(), c, op, id)
 	if e != nil {
-		apierr.Write(w, e)
-		return
+		return e
 	}
 	if t.State != hc.StateFinished {
 		if _, err := c.Kill(r.Context(), id); err != nil {
-			apierr.Write(w, hcError(op, id, err))
-			return
+			return hcError(op, id, err)
 		}
 	}
 	if err := c.Remove(r.Context(), id); err != nil {
-		apierr.Write(w, hcError(op, id, err))
-		return
+		return hcError(op, id, err)
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }

@@ -1,4 +1,4 @@
-// Package api serves the REST tab and swarm endpoints (plan section "HTTP/WS API").
+// Package api serves the REST tab and swarm endpoints (docs/api.md).
 package api
 
 import (
@@ -37,15 +37,14 @@ type server struct{ o Options }
 func New(o Options) http.Handler {
 	s := &server{o: o}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/tabs", s.listTabs)
-	mux.HandleFunc("POST /api/tabs", s.createTab)
-	mux.HandleFunc("PATCH /api/tabs/{id}", s.updateTab)
-	mux.HandleFunc("DELETE /api/tabs/{id}", s.closeTab)
-	mux.HandleFunc("GET /api/swarms", s.listSwarms)
-	mux.HandleFunc("GET /api/dirs", s.listDirs)
+	mux.Handle("GET /api/tabs", apierr.HandlerFunc(s.listTabs))
+	mux.Handle("POST /api/tabs", apierr.HandlerFunc(s.createTab))
+	mux.Handle("PATCH /api/tabs/{id}", apierr.HandlerFunc(s.updateTab))
+	mux.Handle("DELETE /api/tabs/{id}", apierr.HandlerFunc(s.closeTab))
+	mux.Handle("GET /api/swarms", apierr.HandlerFunc(s.listSwarms))
+	mux.Handle("GET /api/dirs", apierr.HandlerFunc(s.listDirs))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
-		apierr.Write(w, &apierr.Error{Status: http.StatusNotFound, Op: "api", Kind: apierr.KindNotFound,
-			Message: fmt.Sprintf("no endpoint %s %s", r.Method, r.URL.Path)})
+		apierr.Write(w, apierr.NotFound("api", "", fmt.Sprintf("no endpoint %s %s", r.Method, r.URL.Path)))
 	})
 	return mux
 }
@@ -83,5 +82,5 @@ func hcError(op, tab string, err error) *apierr.Error {
 		}
 		return &apierr.Error{Status: status, Op: op, Tab: tab, Kind: re.Kind, Hint: re.Hint, Message: msg}
 	}
-	return &apierr.Error{Status: http.StatusInternalServerError, Op: op, Tab: tab, Kind: apierr.KindInternal, Message: err.Error()}
+	return apierr.Internal(op, tab, err.Error())
 }

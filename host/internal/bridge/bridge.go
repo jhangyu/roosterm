@@ -1,4 +1,4 @@
-// Package bridge turns one WebSocket into one hc attach stream (plan section "WebSocket").
+// Package bridge turns one WebSocket into one hc attach stream (docs/api.md, "WebSocket").
 package bridge
 
 import (
@@ -48,8 +48,7 @@ func dim(r *http.Request, id, name string) (uint16, *apierr.Error) {
 	v := r.URL.Query().Get(name)
 	n, err := strconv.Atoi(v)
 	if err != nil || n < 1 || n > maxCells {
-		return 0, &apierr.Error{Status: http.StatusBadRequest, Op: opAttach, Tab: id, Kind: apierr.KindBadRequest,
-			Message: fmt.Sprintf("query %s: expected an integer 1..%d, got %q", name, maxCells, v)}
+		return 0, apierr.BadRequest(opAttach, id, fmt.Sprintf("query %s: expected an integer 1..%d, got %q", name, maxCells, v))
 	}
 	return uint16(n), nil
 }

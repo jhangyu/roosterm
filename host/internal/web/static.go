@@ -38,7 +38,7 @@ func staticHandler() http.Handler {
 		case errors.Is(err, fs.ErrNotExist) || (err == nil && info.IsDir()):
 			name = indexFile
 		case err != nil:
-			apierr.Write(w, &apierr.Error{Status: http.StatusInternalServerError, Op: "static", Kind: apierr.KindInternal, Message: err.Error()})
+			apierr.Write(w, apierr.Internal("static", "", err.Error()))
 			return
 		}
 		http.ServeFileFS(w, r, files, name)

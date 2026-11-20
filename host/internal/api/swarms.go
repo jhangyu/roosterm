@@ -7,11 +7,11 @@ import (
 	"roosterm/host/internal/swarm"
 )
 
-func (s *server) listSwarms(w http.ResponseWriter, r *http.Request) {
+func (s *server) listSwarms(w http.ResponseWriter, r *http.Request) *apierr.Error {
 	names, err := swarm.List(s.o.SwarmDir)
 	if err != nil {
-		apierr.Write(w, &apierr.Error{Status: http.StatusInternalServerError, Op: "swarm.list", Kind: apierr.KindInternal, Message: err.Error()})
-		return
+		return apierr.Internal("swarm.list", "", err.Error())
 	}
 	apierr.WriteJSON(w, http.StatusOK, names)
+	return nil
 }
