@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { listDirs, type DirEntry } from "@/api/http"
 import { ApiError, HTTP_STATUS } from "@/api/types"
-import { loadMemory, parentPath, saveMemory, segments, withoutRecent, withRecent, type FolderMemory } from "./folders"
+import { EMPTY_MEMORY, loadMemory, parentPath, saveMemory, segments, withoutRecent, withRecent, type FolderMemory } from "./folders"
 
 // Mockup 4b (docs/mockups/4b-folder-drill.html): drill-down folder navigator. The folder the breadcrumb ends in is
 // the session's start folder.
@@ -47,7 +47,7 @@ export function useFolderBrowser(open: boolean, onUnauthorized: () => void): Fol
   const [drill, setDrill] = useState<Drill>("none")
   const [notice, setNotice] = useState<string | null>(null)
   const [memoryError, setMemoryError] = useState<string | null>(null)
-  const [memory, setMemory] = useState<FolderMemory>({ recent: [], showHidden: false })
+  const [memory, setMemory] = useState<FolderMemory>(EMPTY_MEMORY)
   const saveFailed = useRef(false)
   const [filter, setFilter] = useState("")
   // Only the latest listing request may update the picker.
@@ -94,7 +94,7 @@ export function useFolderBrowser(open: boolean, onUnauthorized: () => void): Fol
 
   useEffect(() => {
     if (!open) return
-    let remembered: FolderMemory = { recent: [], showHidden: false }
+    let remembered: FolderMemory = EMPTY_MEMORY
     saveFailed.current = false
     try {
       remembered = loadMemory()

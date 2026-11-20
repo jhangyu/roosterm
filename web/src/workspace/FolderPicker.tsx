@@ -19,7 +19,7 @@ import {
 } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { BTN } from "./classes"
-import { baseName, childPath, displayPath, parentPath, segments } from "./folders"
+import { baseName, childPath, displayPath, folderView, matchRange, parentPath, segments } from "./folders"
 import type { FolderBrowser } from "./useFolderBrowser"
 
 // Focus ring shared by rows, crumbs and chips (mockup 4b: 2px grey-14 ring + white inset).
@@ -27,6 +27,11 @@ const FOCUS = "outline-none focus-visible:outline-2 focus-visible:-outline-offse
 // Colour transitions 150 ms (Fluent easy-ease); no double-tap zoom delay on touch.
 const TRANSITION = "touch-manipulation transition-colors duration-150 ease-[cubic-bezier(0.33,0,0.67,1)]"
 const RECOVERY_BTN = `${BTN} max-md:h-11`
+const RECOVERY_GHOST = `${RECOVERY_BTN} border-transparent bg-transparent hover:bg-foreground/5`
+// Skeleton row widths, % of the name column.
+const SKELETON_WIDTHS_PCT = [
+  46, 62, 38, 54, 30,
+]
 // Overflow-menu indent: 10 px base, 12 px per depth.
 const MENU_PAD_PX = 10
 const MENU_INDENT_PX = 12
@@ -34,6 +39,12 @@ const MENU_INDENT_PX = 12
 const MENU_COLLISION_PX = 20
 const HIDDEN_NAMES_SHOWN = 3
 export const KBD = "rounded-xs border border-b-2 border-grey-88 bg-card px-[5px] font-mono text-[11px] text-grey-38"
+
+const STARTS_IN = {
+  ok: { Icon: FolderOpenIcon, label: "Starts in", line: "text-muted-foreground", path: "text-foreground" },
+  warn: { Icon: WarningIcon, label: "Starts in (contents unlisted)", line: "text-warning", path: "text-warning" },
+  bad: { Icon: ErrorCircleIcon, label: "Can’t start in", line: "text-muted-foreground", path: "text-destructive" },
+} as const
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`
 
@@ -95,7 +106,6 @@ function Crumbs({ b }: { b: FolderBrowser }) {
   const inPhoneMenu = (i: number) => phoneCollapse && i < current
   const shown = (i: number) => `${inPhoneMenu(i) ? "hidden" : "flex"} ${inDeskMenu(i) ? "md:hidden" : "md:flex"}`
   const target = (i: number) => segs.slice(0, i + 1).join("/")
-  const collapsed = segs.slice(0, current).length
   const menuVisible = `${phoneCollapse ? "inline-grid" : "hidden"} ${deskCollapse ? "md:inline-grid" : "md:hidden"}`
 
   return (
@@ -112,7 +122,7 @@ function Crumbs({ b }: { b: FolderBrowser }) {
           <Sep className={menuVisible} />
           <DropdownMenu.Root>
             <DropdownMenu.Trigger
-              aria-label={`${collapsed} more folders`}
+              aria-label={`${current} more folders`}
               className={`${menuVisible} ${CRUMB} w-9 place-items-center px-0 text-grey-38 hover:bg-foreground/5 data-[state=open]:bg-foreground/8 data-[state=open]:text-foreground max-md:w-11 max-md:px-0`}
             >
               <MoreHorizontalIcon />
@@ -172,26 +182,26 @@ function CurrentCrumb({ name, home = false }: { name: string; home?: boolean }) 
   )
 }
 
-function Highlight({ name, query }: { name: string; query: string }) {
-  const at = query === "" ? -1 : name.toLowerCase().indexOf(query)
-  if (at < 0) return <>{name}</>
+function Highlight({ name, filter }: { name: string; filter: string }) {
+  const r = filter === "" ? null : matchRange(name, filter)
+  if (r === null) return <>{name}</>
   return (
     <>
-      {name.slice(0, at)}
-      <mark className="rounded-xs bg-brand-150 px-px text-inherit">{name.slice(at, at + query.length)}</mark>
-      {name.slice(at + query.length)}
+      {name.slice(0, r.start)}
+      <mark className="rounded-xs bg-brand-150 px-px text-inherit">{name.slice(r.start, r.end)}</mark>
+      {name.slice(r.end)}
     </>
   )
 }
 
-function Panel(props: { icon: ReactNode; tone?: "plain" | "error"; alert?: boolean; title: string; children?: ReactNode; actions?: ReactNode }) {
+function Panel(props: { icon: ReactNode; error?: boolean; title: string; children?: ReactNode; actions?: ReactNode }) {
   return (
     <div
-      role={props.alert ? "alert" : "status"}
+      role={props.error ? "alert" : "status"}
       className="grid min-h-full content-center justify-items-center gap-1.5 px-6 py-4 text-center text-muted-foreground"
     >
       <span
-        className={`mb-1 grid size-12 place-items-center rounded-md ${props.tone === "error" ? "bg-destructive-bg text-destructive" : "bg-grey-96 text-grey-38"}`}
+        className={`mb-1 grid size-12 place-items-center rounded-md ${props.error ? "bg-destructive-bg text-destructive" : "bg-grey-96 text-grey-38"}`}
       >
         {props.icon}
       </span>
@@ -214,7 +224,7 @@ function UpButton({ b, label }: { b: FolderBrowser; label: string }) {
 
 function RetryButton({ b }: { b: FolderBrowser }) {
   return (
-    <Button variant="ghost" className={`${RECOVERY_BTN} border-transparent bg-transparent hover:bg-foreground/5`} onClick={b.retry}>
+    <Button variant="ghost" className={RECOVERY_GHOST} onClick={b.retry}>
       <ArrowClockwiseIcon className="size-4" />
       Retry
     </Button>
@@ -230,9 +240,9 @@ function Notice({ children }: { children: ReactNode }) {
   )
 }
 
-type ListProps = { b: FolderBrowser; here: string; parentName: string; pool: DirEntry[]; matches: DirEntry[]; query: string; hiddenMatches: number; goAndFocus: (path: string) => void }
+type ListProps = { b: FolderBrowser; here: string; parentName: string; pool: DirEntry[]; matches: DirEntry[]; filter: string; hiddenMatches: number; goAndFocus: (path: string) => void }
 
-function FolderList({ b, here, parentName, pool, matches, query, hiddenMatches, goAndFocus }: ListProps) {
+function FolderList({ b, here, parentName, pool, matches, filter, hiddenMatches, goAndFocus }: ListProps) {
   switch (b.listing.kind) {
     case "loading":
       return (
@@ -242,7 +252,7 @@ function FolderList({ b, here, parentName, pool, matches, query, hiddenMatches, 
             <span className="size-3.5 animate-spin rounded-full border-2 border-brand-150 border-t-primary" aria-hidden="true" />
             Reading {here}…
           </div>
-          {[46, 62, 38, 54, 30].map((w) => (
+          {SKELETON_WIDTHS_PCT.map((w) => (
             <div key={w} className="grid h-10 grid-cols-[20px_1fr] items-center gap-3 px-3" aria-hidden="true">
               <i className="block h-4 w-[18px] animate-pulse rounded-xs bg-grey-94" />
               <i className="block h-3 animate-pulse rounded-xs bg-grey-94" style={{ width: `${w}%` }} />
@@ -253,8 +263,7 @@ function FolderList({ b, here, parentName, pool, matches, query, hiddenMatches, 
     case "denied":
       return (
         <Panel
-          alert
-          tone="error"
+          error
           icon={<LockClosedIcon />}
           title={`Can’t list the contents of ${here}`}
           actions={
@@ -272,18 +281,18 @@ function FolderList({ b, here, parentName, pool, matches, query, hiddenMatches, 
       )
     case "error":
       return (
-        <Panel alert tone="error" icon={<ErrorCircleIcon />} title={`Can’t list ${here}`} actions={<RetryButton b={b} />}>
+        <Panel error icon={<ErrorCircleIcon />} title={`Can’t list ${here}`} actions={<RetryButton b={b} />}>
           <span className="break-all">{b.listing.message}</span>
         </Panel>
       )
     case "gone":
       return (
-        <Panel alert tone="error" icon={<ErrorCircleIcon />} title={`${here} no longer exists`} actions={<UpButton b={b} label={`Up to ${parentName}`} />}>
+        <Panel error icon={<ErrorCircleIcon />} title={`${here} no longer exists`} actions={<UpButton b={b} label={`Up to ${parentName}`} />}>
           <span>It was moved or deleted after the parent was listed.</span>
         </Panel>
       )
     case "ready":
-      if (pool.length === 0 && query === "") {
+      if (pool.length === 0 && filter === "") {
         return (
           <Panel icon={<FolderOpenIcon />} title={`No folders inside ${here}`} actions={<UpButton b={b} label={`Up to ${parentName}`} />}>
             <span>It may still contain files. Start here, or go back up.</span>
@@ -303,7 +312,7 @@ function FolderList({ b, here, parentName, pool, matches, query, hiddenMatches, 
                     Include hidden folders
                   </Button>
                 )}
-                <Button variant="ghost" className={`${RECOVERY_BTN} border-transparent bg-transparent hover:bg-foreground/5`} onClick={() => b.setFilter("")}>
+                <Button variant="ghost" className={RECOVERY_GHOST} onClick={() => b.setFilter("")}>
                   <DismissIcon className="size-4" />
                   Clear filter
                 </Button>
@@ -329,7 +338,7 @@ function FolderList({ b, here, parentName, pool, matches, query, hiddenMatches, 
                 <span
                   className={`truncate max-md:line-clamp-2 max-md:leading-[18px] max-md:break-all max-md:whitespace-normal ${e.hidden ? "text-grey-38" : ""}`}
                 >
-                  <Highlight name={e.name} query={query} />
+                  <Highlight name={e.name} filter={filter} />
                 </span>
                 <ChevronRightIcon className="size-4 text-grey-74" />
               </button>
@@ -344,11 +353,11 @@ function FootBar({ children }: { children: ReactNode }) {
   return <div className="flex items-center justify-between gap-2 border-t border-grey-94 py-1.5 pr-1.5 pl-3.5 text-caption text-muted-foreground">{children}</div>
 }
 
-type FootProps = { b: FolderBrowser; ready: boolean; query: string; matches: DirEntry[]; hiddenEntries: DirEntry[]; showHidden: boolean; autoHidden: boolean }
+type FootProps = { b: FolderBrowser; ready: boolean; filter: string; matches: DirEntry[]; hiddenEntries: DirEntry[]; showHidden: boolean; autoHidden: boolean }
 
-function FolderFoot({ ready, query, matches, hiddenEntries, showHidden, autoHidden, b }: FootProps) {
+function FolderFoot({ ready, filter, matches, hiddenEntries, showHidden, autoHidden, b }: FootProps) {
   if (!ready) return null
-  if (query !== "" && matches.length > 0) {
+  if (filter !== "" && matches.length > 0) {
     return (
       <FootBar>
         <span>
@@ -360,7 +369,7 @@ function FolderFoot({ ready, query, matches, hiddenEntries, showHidden, autoHidd
       </FootBar>
     )
   }
-  if (hiddenEntries.length === 0 || query !== "") return null
+  if (hiddenEntries.length === 0 || filter !== "") return null
   const names = hiddenEntries.slice(0, HIDDEN_NAMES_SHOWN).map((e) => e.name).join(", ")
   const more = hiddenEntries.length > HIDDEN_NAMES_SHOWN ? ", …" : ""
   return (
@@ -386,16 +395,7 @@ export function FolderPicker({ b, className = "" }: { b: FolderBrowser; classNam
   const here = baseName(b.path)
   const parentName = baseName(parentPath(b.path))
   const entries = b.listing.kind === "ready" ? b.listing.entries : []
-  const hiddenEntries = entries.filter((e) => e.hidden)
-  // Dot folders show when asked for, when the filter starts with ".", or when already inside a dot folder.
-  const autoHidden = b.filter.startsWith(".") || segments(b.path).some((s) => s.startsWith("."))
-  const showHidden = b.memory.showHidden || autoHidden
-  const pool = showHidden ? entries : entries.filter((e) => !e.hidden)
-  const query = b.filter.toLowerCase()
-  const prefix = pool.filter((e) => e.name.toLowerCase().startsWith(query))
-  const inner = pool.filter((e) => !e.name.toLowerCase().startsWith(query) && e.name.toLowerCase().includes(query))
-  const matches = query === "" ? pool : [...prefix, ...inner]
-  const hiddenMatches = query === "" || showHidden ? 0 : hiddenEntries.filter((e) => e.name.toLowerCase().includes(query)).length
+  const { hiddenEntries, autoHidden, showHidden, pool, matches, hiddenMatches } = folderView(entries, b.path, b.filter, b.memory.showHidden)
   const ready = b.listing.kind === "ready"
 
   const goAndFocus = (next: string) => {
@@ -452,7 +452,6 @@ export function FolderPicker({ b, className = "" }: { b: FolderBrowser; classNam
     }
   }
 
-
   const drillAnim =
     b.drill === "in"
       ? "animate-in fade-in slide-in-from-right-6 duration-(--picker-drill-dur) ease-(--picker-drill-ease) motion-reduce:animate-none"
@@ -466,7 +465,7 @@ export function FolderPicker({ b, className = "" }: { b: FolderBrowser; classNam
         <Crumbs b={b} />
       </div>
       <label
-        className={`flex h-(--picker-filter-h) shrink-0 items-center gap-2 border-b border-grey-94 px-3 text-grey-38 focus-within:shadow-[inset_0_-2px_0_var(--primary)] max-md:h-(--picker-filter-h-touch) ${query !== "" ? "shadow-[inset_0_-2px_0_var(--primary)]" : ""}`}
+        className={`flex h-(--picker-filter-h) shrink-0 items-center gap-2 border-b border-grey-94 px-3 text-grey-38 focus-within:shadow-[inset_0_-2px_0_var(--primary)] max-md:h-(--picker-filter-h-touch) ${b.filter !== "" ? "shadow-[inset_0_-2px_0_var(--primary)]" : ""}`}
       >
         <SearchIcon className="size-4 shrink-0" />
         <input
@@ -483,7 +482,7 @@ export function FolderPicker({ b, className = "" }: { b: FolderBrowser; classNam
           onChange={(e) => b.setFilter(e.target.value)}
           className="h-full min-w-0 flex-1 border-0 bg-transparent text-foreground outline-none placeholder:text-grey-38 [&::-webkit-search-cancel-button]:hidden"
         />
-        {query !== "" && (
+        {b.filter !== "" && (
           <>
             <span className="text-caption whitespace-nowrap text-muted-foreground" aria-live="polite">
               {matches.length} of {pool.length}
@@ -506,30 +505,22 @@ export function FolderPicker({ b, className = "" }: { b: FolderBrowser; classNam
               <span className="font-mono text-foreground">{displayPath(b.notice)}</span> was moved or deleted. Opened its nearest parent instead.
             </Notice>
           )}
-          <FolderList b={b} here={here} parentName={parentName} pool={pool} matches={matches} query={query} hiddenMatches={hiddenMatches} goAndFocus={goAndFocus} />
+          <FolderList b={b} here={here} parentName={parentName} pool={pool} matches={matches} filter={b.filter} hiddenMatches={hiddenMatches} goAndFocus={goAndFocus} />
         </div>
       </div>
-      <FolderFoot b={b} ready={ready} query={query} matches={matches} hiddenEntries={hiddenEntries} showHidden={showHidden} autoHidden={autoHidden} />
+      <FolderFoot b={b} ready={ready} filter={b.filter} matches={matches} hiddenEntries={hiddenEntries} showHidden={showHidden} autoHidden={autoHidden} />
     </div>
   )
 }
 
 // "Starts in" line: the session's folder, truncated from the left so the folder name stays visible.
 export function StartsIn({ b, className = "" }: { b: FolderBrowser; className?: string }) {
-  const tone = b.listing.kind === "gone" ? "bad" : b.listing.kind === "denied" ? "warn" : "ok"
+  const s = STARTS_IN[b.listing.kind === "gone" ? "bad" : b.listing.kind === "denied" ? "warn" : "ok"]
   return (
-    <div className={`flex min-w-0 items-center gap-2 text-caption whitespace-nowrap ${tone === "warn" ? "text-warning" : "text-muted-foreground"} ${className}`}>
-      {tone === "bad" ? (
-        <ErrorCircleIcon className="size-4 shrink-0" />
-      ) : tone === "warn" ? (
-        <WarningIcon className="size-4 shrink-0" />
-      ) : (
-        <FolderOpenIcon className="size-4 shrink-0" />
-      )}
-      {tone === "bad" ? "Can’t start in" : tone === "warn" ? "Starts in (contents unlisted)" : "Starts in"}
-      <code
-        className={`min-w-0 truncate text-left font-mono [direction:rtl] ${tone === "bad" ? "text-destructive" : tone === "warn" ? "text-warning" : "text-foreground"}`}
-      >
+    <div className={`flex min-w-0 items-center gap-2 text-caption whitespace-nowrap ${s.line} ${className}`}>
+      <s.Icon className="size-4 shrink-0" />
+      {s.label}
+      <code className={`min-w-0 truncate text-left font-mono [direction:rtl] ${s.path}`}>
         <span dir="ltr">{displayPath(b.path)}</span>
       </code>
     </div>
