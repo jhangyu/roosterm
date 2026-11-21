@@ -17,7 +17,7 @@ roosterm is a terminal shell only: it never parses Claude Code, and has no chat 
 - **Three kinds of new session.** Shell, Claude Code, or attach to a running Claude Code swarm (a `claude-swarm-*` tmux socket).
   <!-- evidence: web/src/workspace/NewSessionDialog.tsx:25 type Kind = "shell" | "claude" | "swarm"; docs/api.md:53 GET /api/swarms; web/src/workspace/tabs.ts:22 CLAUDE_PROGRAM -->
 - **Mobile-friendly key bar.** Esc, Tab, Shift-Tab and the arrow keys are sent as terminal sequences, honouring application-cursor mode.
-  <!-- evidence: web/src/lib/keys.ts:1-16; web/src/terminal/KeyBar.tsx -->
+  <!-- evidence: web/src/lib/keys.ts:1-18; web/src/terminal/KeyBar.tsx -->
 - **Reconnect without timers.** A reconnect is a fresh attach and hc repaints the whole screen. The web client reconnects when the browser comes back online or the page returns to the foreground; the server re-dials hc when its socket reappears.
   <!-- evidence: web/src/lib/resume.ts:1-10; docs/design.md:27-31; host/internal/hc/supervisor.go:11,34 fsnotify watcher -->
 - **Single self-contained binary.** The web client is embedded in the Go binary; no Docker, database or Node is needed at run time.

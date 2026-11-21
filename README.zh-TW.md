@@ -17,7 +17,7 @@ roosterm 只是終端機外殼：它不解析 Claude Code，也沒有聊天介�
 - **三種新工作階段。** Shell、Claude Code，或接上執行中的 Claude Code swarm（`claude-swarm-*` tmux socket）。
   <!-- evidence: web/src/workspace/NewSessionDialog.tsx:25 type Kind = "shell" | "claude" | "swarm"; docs/api.md:53 GET /api/swarms; web/src/workspace/tabs.ts:22 CLAUDE_PROGRAM -->
 - **適合手機的按鍵列。** Esc、Tab、Shift-Tab 與方向鍵會送出對應的終端機序列，並支援 application-cursor 模式。
-  <!-- evidence: web/src/lib/keys.ts:1-16; web/src/terminal/KeyBar.tsx -->
+  <!-- evidence: web/src/lib/keys.ts:1-18; web/src/terminal/KeyBar.tsx -->
 - **不靠計時器的重新連線。** 重新連線就是重新 attach，hc 會重繪整個畫面。網頁用戶端在瀏覽器恢復連線或頁面回到前景時重連；hc 的 socket 重新出現時，伺服器端會自動重新連上。
   <!-- evidence: web/src/lib/resume.ts:1-10; docs/design.md:27-31; host/internal/hc/supervisor.go:11,34 fsnotify watcher -->
 - **單一獨立執行檔。** 網頁用戶端內嵌在 Go 執行檔中；執行時不需要 Docker、資料庫或 Node。
