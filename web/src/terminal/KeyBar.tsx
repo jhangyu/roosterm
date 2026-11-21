@@ -1,5 +1,5 @@
 import type { ReactNode } from "react"
-import { ArrowDownIcon, ArrowLeftIcon, ArrowRightIcon, ArrowUpIcon, KeyboardShiftIcon, KeyboardTabIcon } from "@/components/icons"
+import { ArrowDownIcon, ArrowExitIcon, ArrowLeftIcon, ArrowRightIcon, ArrowSyncIcon, ArrowUpIcon, KeyboardTabIcon, StopIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { SpecialKey } from "@/lib/keys"
@@ -9,15 +9,14 @@ type KeyBarProps = {
   ctrlLatched: boolean
   onToggleCtrl: () => void
   onKey: (key: SpecialKey) => void
-  onLetter: (letter: "c" | "d") => void
 }
 
 const ICON = "size-[18px]"
 const KEY =
   "h-11 min-w-11 shrink-0 gap-1 rounded-sm border-0 bg-card px-2.5 text-[13px] font-semibold leading-none text-foreground shadow-2 hover:bg-card"
 
-// Order: Esc, arrows (used more than Tab), divider, Tab, Shift+Tab, Ctrl (latching), C, D.
-export function KeyBar({ disabled, ctrlLatched, onToggleCtrl, onKey, onLetter }: KeyBarProps) {
+// Order: Esc, arrows (used more than Tab), divider, Tab, Shift+Tab (cycles modes), Ctrl (latching), Ctrl+C, Ctrl+D.
+export function KeyBar({ disabled, ctrlLatched, onToggleCtrl, onKey }: KeyBarProps) {
   const key = (aria: string, onClick: () => void, content: ReactNode) => (
     <Button
       key={aria}
@@ -45,7 +44,7 @@ export function KeyBar({ disabled, ctrlLatched, onToggleCtrl, onKey, onLetter }:
       {key("Right", () => onKey("right"), <ArrowRightIcon className={ICON} />)}
       <span className="mx-0.5 my-1.5 w-px shrink-0 bg-foreground/[0.08]" aria-hidden />
       {key("Tab", () => onKey("tab"), <><KeyboardTabIcon className={ICON} />Tab</>)}
-      {key("Shift+Tab", () => onKey("shift-tab"), <><KeyboardShiftIcon className={ICON} />Tab</>)}
+      {key("Shift+Tab", () => onKey("shift-tab"), <ArrowSyncIcon className={ICON} />)}
       <Button
         type="button"
         variant="ghost"
@@ -61,8 +60,8 @@ export function KeyBar({ disabled, ctrlLatched, onToggleCtrl, onKey, onLetter }:
       >
         Ctrl
       </Button>
-      {key("C", () => onLetter("c"), "C")}
-      {key("D", () => onLetter("d"), "D")}
+      {key("Ctrl+C", () => onKey("ctrl-c"), <StopIcon className={ICON} />)}
+      {key("Ctrl+D", () => onKey("ctrl-d"), <ArrowExitIcon className={ICON} />)}
     </div>
   )
 }

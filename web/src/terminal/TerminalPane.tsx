@@ -222,7 +222,6 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
         ctrlLatched={ctrlLatched}
         onToggleCtrl={() => setCtrl(!ctrlRef.current)}
         onKey={sendKey}
-        onLetter={input}
       />
     </div>
   )

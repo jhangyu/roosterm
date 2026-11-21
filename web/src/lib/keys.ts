@@ -1,4 +1,4 @@
-export type SpecialKey = "esc" | "tab" | "shift-tab" | "up" | "down" | "left" | "right"
+export type SpecialKey = "esc" | "tab" | "shift-tab" | "up" | "down" | "left" | "right" | "ctrl-c" | "ctrl-d"
 
 const ESC = "\x1b"
 
@@ -12,5 +12,7 @@ export function keySequence(key: SpecialKey, applicationCursor: boolean): string
     case "down": return `${arrow}B`
     case "right": return `${arrow}C`
     case "left": return `${arrow}D`
+    case "ctrl-c": return "\x03"
+    case "ctrl-d": return "\x04"
   }
 }
