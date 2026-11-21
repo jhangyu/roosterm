@@ -32,6 +32,7 @@ This section lists what you get.
 
 ## Contents
 
+- [Screenshots](#screenshots)
 - [How it works](#how-it-works)
 - [Before you start](#before-you-start)
 - [Install](#install)
@@ -47,6 +48,23 @@ This section lists what you get.
 - [Development and tests](#development-and-tests)
 - [API and design docs](#api-and-design-docs)
 - [Project layout](#project-layout)
+
+## Screenshots
+
+This section shows the web client and the Android app. Every screen comes from a demo host.
+
+![Web client on a desktop: the session list on the left and a terminal running top](docs/images/web-terminal.webp)
+*Web client on a desktop: the session list and a running terminal.*
+
+![New session dialog with Shell, Claude Code and Swarm, and the folder picker](docs/images/web-new-session.webp)
+*New session: pick Shell, Claude Code or Swarm, and the folder to start in.*
+
+![Sign-in page](docs/images/web-login.webp)
+*Sign-in page.*
+
+| Web client on a phone | Android app: hosts | Android app: add host | Android app: terminal |
+|---|---|---|---|
+| <img src="docs/images/web-phone.webp" width="200" alt="Web client on a phone: tab chips, a terminal and the key bar"> | <img src="docs/images/app-hosts.webp" width="200" alt="Android app host list"> | <img src="docs/images/app-add-host.webp" width="200" alt="Android app Add host dialog with name and https URL"> | <img src="docs/images/app-host.webp" width="200" alt="Android app showing a terminal with the key bar above the keyboard"> |
 
 ## How it works
 

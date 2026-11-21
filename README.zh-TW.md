@@ -32,6 +32,7 @@ roosterm 只是終端機外殼：它不解析 Claude Code，也沒有聊天介�
 
 ## 目錄
 
+- [截圖](#截圖)
 - [運作方式](#運作方式)
 - [開始之前](#開始之前)
 - [安裝](#安裝)
@@ -47,6 +48,23 @@ roosterm 只是終端機外殼：它不解析 Claude Code，也沒有聊天介�
 - [開發與測試](#開發與測試)
 - [API 與設計文件](#api-與設計文件)
 - [專案結構](#專案結構)
+
+## 截圖
+
+本節展示網頁用戶端與 Android App。所有畫面都來自示範主機。
+
+![桌面瀏覽器的網頁用戶端：左側為工作階段清單，右側終端機正在執行 top](docs/images/web-terminal.webp)
+*桌面瀏覽器的網頁用戶端：工作階段清單與執行中的終端機。*
+
+![新工作階段對話框：Shell、Claude Code、Swarm 三種類型與資料夾選擇器](docs/images/web-new-session.webp)
+*新工作階段：選擇 Shell、Claude Code 或 Swarm，以及起始資料夾。*
+
+![登入頁面](docs/images/web-login.webp)
+*登入頁面。*
+
+| 手機瀏覽器的網頁用戶端 | Android App：主機清單 | Android App：新增主機 | Android App：終端機 |
+|---|---|---|---|
+| <img src="docs/images/web-phone.webp" width="200" alt="手機瀏覽器的網頁用戶端：分頁標籤、終端機與按鍵列"> | <img src="docs/images/app-hosts.webp" width="200" alt="Android App 主機清單"> | <img src="docs/images/app-add-host.webp" width="200" alt="Android App 新增主機對話框，含名稱與 https 網址"> | <img src="docs/images/app-host.webp" width="200" alt="Android App 顯示終端機，按鍵列位於鍵盤上方"> |
 
 ## 運作方式
 
