@@ -6,7 +6,7 @@ roosterm 是自行架設的網頁終端機：透過 HTTPS 連到你自己的主�
 <!-- evidence: docs/design.md:4; host/cmd/roosterm/main.go:19-22; app/README.md:3 -->
 
 伺服器跑在你自己的 Mac 或 Linux 機器上。你可以用任何瀏覽器連線，也可以用 Android App，App 可直接從 [GitHub Releases](https://github.com/jhangyu/roosterm/releases) 下載現成的版本。
-<!-- evidence: docs/design.md:7 (no Windows host); gh release view app-v0.0.0 (three APK assets); .github/workflows/android.yml -->
+<!-- evidence: docs/design.md:7 (no Windows host); gh release view app-v0.0.0 (three APK assets); .github/workflows/release.yml -->
 
 roosterm 只是終端機外殼：它不解析 Claude Code，也沒有聊天介面、推播通知、多帳號或 Windows 主機支援。
 <!-- evidence: docs/design.md:6-9 -->
@@ -79,7 +79,7 @@ browser / Flutter WebView ──HTTPS (你的反向代理)──▶ roosterm (�
   <!-- evidence: docs/api.md:16; host/internal/web/server.go:35 (GET /ws/tabs/{id}) -->
 - 選用：一支 Android 手機，用來裝 App。
 - 一份適合你主機的預先建置伺服器套件，從 [GitHub Releases](https://github.com/jhangyu/roosterm/releases) 下載（見〈安裝〉）。
-  <!-- evidence: scripts/ci.py:94-105; .github/workflows/android.yml:34-45 -->
+  <!-- evidence: scripts/ci.py:94-105; .github/workflows/release.yml:34-45 -->
 
 ## 安裝
 
@@ -373,8 +373,8 @@ flutter build apk
    <!-- evidence: scripts/ci.py:8-9,191-216 -->
 2. 已追蹤檔案有未提交的變更（未追蹤檔案不計），或標籤已存在時，它會拒絕執行。
    <!-- evidence: scripts/ci.py:202-206 -->
-3. `git push origin HEAD app-vX.Y.Z` 會觸發 `.github/workflows/android.yml`：先跑測試防護（`ci.py guard`；CI 永不跑測試），再建置各 ABI 的 APK（`ci.py build android`）與四個伺服器套件（`ci.py build server`），最後發佈一個標題為 `roosterm X.Y.Z` 的 GitHub Release，附上三個 APK 與四個套件。建置需要下面說明的四個簽章 secrets，缺少時會失敗。
-   <!-- evidence: .github/workflows/android.yml:33-45; scripts/ci.py:82-105,232; scripts/ci_guard.py:2-6 -->
+3. `git push origin HEAD app-vX.Y.Z` 會觸發 `.github/workflows/release.yml`：先跑測試防護（`ci.py guard`；CI 永不跑測試），再建置各 ABI 的 APK（`ci.py build android`）與四個伺服器套件（`ci.py build server`），最後發佈一個標題為 `roosterm X.Y.Z` 的 GitHub Release，附上三個 APK 與四個套件。建置需要下面說明的四個簽章 secrets，缺少時會失敗。
+   <!-- evidence: .github/workflows/release.yml:33-45; scripts/ci.py:82-105,232; scripts/ci_guard.py:2-6 -->
 4. 本機 hook：執行 `git config core.hooksPath .githooks` 後，每次 push 都會跑 `python3 scripts/ci.py prepush`（防護加上同一套建置，輸出在 `app/build/dist/`）。
    <!-- evidence: .githooks/pre-push; ci.py:7,243,256 -->
 
@@ -429,7 +429,7 @@ app/lib/             Flutter host list and WebView pages
 deploy/              install.py, systemd units, launchd plist, deploy/README.md
 docs/                design.md, api.md, hc-bridge.md, logs/
 scripts/             build.py, test.py, ci.py, ci_guard.py
-.github/workflows/   android.yml
+.github/workflows/   release.yml
 .githooks/           pre-push
 ```
 <!-- evidence: ls host/internal web/src app/lib scripts .github/workflows .githooks -->

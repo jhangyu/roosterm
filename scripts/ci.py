@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / "app/pubspec.yaml"
 VERSION_LINE = re.compile(r"^version: (\d+)\.(\d+)\.(\d+)\+(\d+)$", re.MULTILINE)
 BUMP_PARTS = ("major", "minor", "patch")
-TAG_PREFIX = "app-v"   # .github/workflows/android.yml `tags: ["app-v*"]` must match
+TAG_PREFIX = "app-v"   # .github/workflows/release.yml `tags: ["app-v*"]` must match
 DIST = ROOT / "app/build/dist"   # inside the gitignored app/build/
 
 

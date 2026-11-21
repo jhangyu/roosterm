@@ -6,7 +6,7 @@ roosterm is a self-hosted web terminal. It gives you full terminals (a login she
 <!-- evidence: docs/design.md:4; host/cmd/roosterm/main.go:19-22; app/README.md:3 -->
 
 The server runs on your own Mac or Linux machine. Use it from any browser, or from the Android app, which you can download ready-made from [GitHub Releases](https://github.com/jhangyu/roosterm/releases).
-<!-- evidence: docs/design.md:7 (no Windows host); gh release view app-v0.0.0 (three APK assets); .github/workflows/android.yml -->
+<!-- evidence: docs/design.md:7 (no Windows host); gh release view app-v0.0.0 (three APK assets); .github/workflows/release.yml -->
 
 roosterm is a terminal shell only. It never parses Claude Code, and it has no chat UI, push notifications, multiple accounts or Windows host support.
 <!-- evidence: docs/design.md:6-9 -->
@@ -79,7 +79,7 @@ This section lists what you need.
   <!-- evidence: docs/api.md:16; host/internal/web/server.go:35 -->
 - Optional: an Android phone for the app.
 - A prebuilt server package for your host from [GitHub Releases](https://github.com/jhangyu/roosterm/releases) (see Install).
-  <!-- evidence: scripts/ci.py:94-105; .github/workflows/android.yml:34-45 -->
+  <!-- evidence: scripts/ci.py:94-105; .github/workflows/release.yml:34-45 -->
 
 ## Install
 
@@ -368,8 +368,8 @@ This section explains how a release is made.
    <!-- evidence: scripts/ci.py:8-9,191-216 -->
 2. It refuses to run when tracked files have uncommitted changes (untracked files are ignored) or when the tag already exists.
    <!-- evidence: ci.py:202-206 -->
-3. `git push origin HEAD app-vX.Y.Z` triggers `.github/workflows/android.yml`. It runs the test guard (`ci.py guard`; CI never runs tests), builds per-ABI release APKs (`ci.py build android`) and the four server packages (`ci.py build server`), and publishes one GitHub Release, titled `roosterm X.Y.Z`, with the three APKs and four packages. The build needs the four signing secrets described below and fails when they are missing.
-   <!-- evidence: .github/workflows/android.yml:33-45; scripts/ci.py:82-105,232; scripts/ci_guard.py:2-6 -->
+3. `git push origin HEAD app-vX.Y.Z` triggers `.github/workflows/release.yml`. It runs the test guard (`ci.py guard`; CI never runs tests), builds per-ABI release APKs (`ci.py build android`) and the four server packages (`ci.py build server`), and publishes one GitHub Release, titled `roosterm X.Y.Z`, with the three APKs and four packages. The build needs the four signing secrets described below and fails when they are missing.
+   <!-- evidence: .github/workflows/release.yml:33-45; scripts/ci.py:82-105,232; scripts/ci_guard.py:2-6 -->
 4. Locally, `git config core.hooksPath .githooks` makes each push run `python3 scripts/ci.py prepush` (guard plus the same build, output in `app/build/dist/`).
    <!-- evidence: .githooks/pre-push; ci.py:7,243,256 -->
 
@@ -424,7 +424,7 @@ app/lib/             Flutter host list and WebView pages
 deploy/              install.py, systemd units, launchd plist, deploy/README.md
 docs/                design.md, api.md, hc-bridge.md, logs/
 scripts/             build.py, test.py, ci.py, ci_guard.py
-.github/workflows/   android.yml
+.github/workflows/   release.yml
 .githooks/           pre-push
 ```
 <!-- evidence: ls host/internal web/src app/lib scripts .github/workflows .githooks -->
