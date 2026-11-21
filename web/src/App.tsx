@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { closeTab, createTab, listTabs, logout, renameTab, setTabHidden } from "@/api/http"
-import { ApiError, HTTP_STATUS, type CreateRequest, type Tab, type TabEnd } from "@/api/types"
+import { ApiError, HTTP_STATUS, isHostUnreachable, type CreateRequest, type Tab, type TabEnd } from "@/api/types"
 import { AddIcon, ArrowClockwiseIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { onResume } from "@/lib/resume"
@@ -22,7 +22,7 @@ export default function App() {
   const [{ tabs, hidden, activeId }, setWs] = useState<Workspace>({ tabs: [], hidden: [], activeId: null })
   const [error, setError] = useState<ApiError | null>(null)
   // True from a terminal socket loss until the next successful API call: the pane's "Connection lost"
-  // banner is then the one signal for an unreachable host, so network failures are not repeated as alerts.
+  // banner is then the one signal for an unreachable host, so those failures are not repeated as alerts.
   const linkDown = useRef(false)
   const [newOpen, setNewOpen] = useState(false)
   const [renaming, setRenaming] = useState<Tab | null>(null)
@@ -44,7 +44,7 @@ export default function App() {
       } catch (e) {
         if (!(e instanceof ApiError)) throw e
         if (e.status === HTTP_STATUS.unauthorized) signOut()
-        else if (!(e.status === HTTP_STATUS.networkFailure && linkDown.current)) setError(e)
+        else if (!(isHostUnreachable(e.status) && linkDown.current)) setError(e)
       }
     },
     [signOut],
@@ -188,7 +188,7 @@ export default function App() {
         {error !== null && <ErrorAlert error={error} onDismiss={() => setError(null)} className="mx-2.5 mb-3.5 w-auto md:mx-0" />}
         <div className="flex min-h-0 flex-1 flex-col px-2.5 md:px-0">
           {active !== null ? (
-            <TerminalPane key={active.id} tab={active} onExited={markExited} onClose={close} onSocketLost={socketLost} onRestart={() => restart(active)} onTitle={(id, title) => setWs((ws) => updateTab(ws, id, (t) => ({ ...t, title })))} />
+            <TerminalPane key={active.id} tab={active} onExited={markExited} onClose={close} onSocketLost={socketLost} onSocketRestored={() => void refresh()} onRestart={() => restart(active)} onTitle={(id, title) => setWs((ws) => updateTab(ws, id, (t) => ({ ...t, title })))} />
           ) : (
             // Not in mockup 3: empty state in the focused-card position.
             <div className="mb-2.5 grid flex-1 place-items-center rounded-lg bg-card shadow-8 md:mb-0">

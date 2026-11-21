@@ -19,7 +19,25 @@ export function parseTabEnd(v: unknown): TabEnd | undefined {
 export type CreateRequest = { swarm: string } | { command?: string[]; label?: string; cwd?: string }
 
 // ApiError.status values the client reacts to (0 = the request never reached the host).
-export const HTTP_STATUS = { networkFailure: 0, unauthorized: 401, forbidden: 403, notFound: 404, tooManyRequests: 429 } as const
+export const HTTP_STATUS = {
+  networkFailure: 0,
+  unauthorized: 401,
+  forbidden: 403,
+  notFound: 404,
+  tooManyRequests: 429,
+  badGateway: 502,
+  serviceUnavailable: 503,
+  gatewayTimeout: 504,
+} as const
+
+// The host cannot be reached: the request failed, or a reverse proxy in front answered for the dead host.
+const HOST_UNREACHABLE_STATUSES: readonly number[] = [
+  HTTP_STATUS.networkFailure,
+  HTTP_STATUS.badGateway,
+  HTTP_STATUS.serviceUnavailable,
+  HTTP_STATUS.gatewayTimeout,
+]
+export const isHostUnreachable = (status: number): boolean => HOST_UNREACHABLE_STATUSES.includes(status)
 
 export class ApiError extends Error {
   readonly op: string

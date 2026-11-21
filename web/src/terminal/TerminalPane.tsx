@@ -23,11 +23,12 @@ type TerminalPaneProps = {
   onExited: (tabId: string, end: TabEnd) => void
   onClose: (tabId: string) => void
   onSocketLost: () => void
+  onSocketRestored: () => void
   onRestart?: () => void
   onTitle: (tabId: string, title: string) => void
 }
 
-export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, onTitle }: TerminalPaneProps) {
+export function TerminalPane({ tab, onExited, onClose, onSocketLost, onSocketRestored, onRestart, onTitle }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const socketRef = useRef<TabSocket | null>(null)
@@ -40,9 +41,10 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
   // Socket callbacks and the resume listener outlive renders; they read the latest state/props via refs.
   const stateRef = useRef<PaneState>(initial)
   const ctrlRef = useRef(false)
-  const propsRef = useRef({ onExited, onSocketLost, onTitle })
+  const socketWasLost = useRef(false)
+  const propsRef = useRef({ onExited, onSocketLost, onSocketRestored, onTitle })
   useLayoutEffect(() => {
-    propsRef.current = { onExited, onSocketLost, onTitle }
+    propsRef.current = { onExited, onSocketLost, onSocketRestored, onTitle }
   })
 
   const setCtrl = (latched: boolean) => {
@@ -72,6 +74,7 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
       case "disconnected":
       case "not-found":
       case "server-shutdown":
+        socketWasLost.current = true
         propsRef.current.onSocketLost()
         return
       case "server-error":
@@ -98,6 +101,10 @@ export function TerminalPane({ tab, onExited, onClose, onSocketLost, onRestart, 
       onOpen: () => {
         setPane({ kind: "live" })
         term.focus()
+        if (socketWasLost.current) {
+          socketWasLost.current = false
+          propsRef.current.onSocketRestored()
+        }
       },
       onOutput: (data) => {
         lastOutputRef.current = new Date()

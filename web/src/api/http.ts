@@ -1,12 +1,22 @@
 import { ApiError, HTTP_STATUS, parseTabEnd, type CreateRequest, type Tab } from "./types"
 
-// Backend error body: {"error":{op,tab?,message,kind,hint?}}. Anything else (e.g. a proxy page) is shown raw.
+const FOREIGN_BODY_MAX_CHARS = 200
+const HTML_TITLE = /<title[^>]*>([\s\S]*?)<\/title>/i
+
+// A body the backend did not write (e.g. a proxy's HTML error page): the page <title>, else the first line, cut short.
+function summarizeForeignBody(text: string): string {
+  const title = HTML_TITLE.exec(text)?.[1].trim()
+  const line = title || (text.trim().split("\n")[0] ?? "").trim()
+  return line.length > FOREIGN_BODY_MAX_CHARS ? `${line.slice(0, FOREIGN_BODY_MAX_CHARS)}…` : line
+}
+
+// Backend error body: {"error":{op,tab?,message,kind,hint?}}. Anything else (e.g. a proxy page) is summarized.
 function errorFromBody(op: string, status: number, text: string, tabId: string | undefined, retryAfter: string | null): ApiError {
   let body: unknown
   try {
     body = JSON.parse(text)
   } catch {
-    return new ApiError(op, status, null, text, tabId, retryAfter)
+    return new ApiError(op, status, null, summarizeForeignBody(text), tabId, retryAfter)
   }
   const e = typeof body === "object" && body !== null ? (body as Record<string, unknown>).error : undefined
   if (typeof e === "object" && e !== null) {
@@ -16,7 +26,7 @@ function errorFromBody(op: string, status: number, text: string, tabId: string |
       return new ApiError(op, status, kind, detail, typeof tab === "string" ? tab : tabId, retryAfter)
     }
   }
-  return new ApiError(op, status, null, text, tabId, retryAfter)
+  return new ApiError(op, status, null, summarizeForeignBody(text), tabId, retryAfter)
 }
 
 async function call(op: string, method: string, path: string, body?: unknown, tabId?: string): Promise<Response> {
