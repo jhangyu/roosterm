@@ -2,7 +2,7 @@ name: roosterm
 description: "Android WebView shell that lists roosterm hosts and opens one."
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-version: 0.0.0+1
+version: 0.0.1+2
 
 environment:
   sdk: ^3.12.2
