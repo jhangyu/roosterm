@@ -84,7 +84,7 @@ flutter build apk
 ```
 <!-- evidence: app/README.md:5-8; docs/logs/2026-11-21-refactor2.md "Android release stays debug-signed" -->
 
-發版與 CI：`python3 scripts/ci.py bump patch`（或 `minor`/`major`）會更新 `app/pubspec.yaml`、提交並建立標籤 `app-vX.Y.Z`；已追蹤檔案有未提交變更（未追蹤檔案不計）或標籤已存在時會拒絕執行。接著 `git push origin HEAD app-vX.Y.Z` 觸發 `.github/workflows/android.yml`：先跑測試防護（`ci.py guard`；CI 永不跑測試），再建置各 ABI 的 release APK（`ci.py build android`），最後發佈 GitHub Release，附 `us.jhangy.roosterm-{arm64-v8a,armeabi-v7a,x86_64}.apk`。發佈使用內建的 `GITHUB_TOKEN`，不需設定 secrets。本機執行 `git config core.hooksPath .githooks` 後，每次 push 都會跑 `python3 scripts/ci.py prepush`（防護＋同一套建置，輸出在 `app/build/dist/`）。一般的 `flutter build apk` 仍只含 arm64；只有分 ABI 建置才包含三種 ABI。
+發版與 CI：`python3 scripts/ci.py bump patch`（或 `minor`/`major`，或明確指定版本如 `bump 0.0.0+1`）會更新 `app/pubspec.yaml`、提交並建立標籤 `app-vX.Y.Z`；已追蹤檔案有未提交變更（未追蹤檔案不計）或標籤已存在時會拒絕執行。接著 `git push origin HEAD app-vX.Y.Z` 觸發 `.github/workflows/android.yml`：先跑測試防護（`ci.py guard`；CI 永不跑測試），再建置各 ABI 的 release APK（`ci.py build android`），最後發佈 GitHub Release，附 `us.jhangy.roosterm-{arm64-v8a,armeabi-v7a,x86_64}.apk`。發佈使用內建的 `GITHUB_TOKEN`，不需設定 secrets。本機執行 `git config core.hooksPath .githooks` 後，每次 push 都會跑 `python3 scripts/ci.py prepush`（防護＋同一套建置，輸出在 `app/build/dist/`）。一般的 `flutter build apk` 仍只含 arm64；只有分 ABI 建置才包含三種 ABI。
 <!-- evidence: .github/workflows/android.yml; scripts/ci.py PLATFORMS, bump, release; scripts/ci_guard.py; .githooks/pre-push; app/android/build.gradle.kts split-per-abi -->
 
 ### 首次設定

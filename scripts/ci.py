@@ -5,8 +5,8 @@
   ci.py guard                          fail if CI could run a test
   ci.py build [platform ...]           compile and collect named release files (default: all platforms)
   ci.py prepush                        guard + build, the pre-push hook
-  ci.py bump {major,minor,patch} [--dry-run]
-                                       bump app/pubspec.yaml, commit it, tag app-vX.Y.Z (does not push)
+  ci.py bump {major,minor,patch|X.Y.Z+N} [--dry-run]
+                                       bump (or set) app/pubspec.yaml, commit it, tag app-vX.Y.Z (does not push)
   ci.py release [platform ...] [--dry-run]
                                        on CI: publish the tag's GitHub Release with the collected files
 """
@@ -25,6 +25,7 @@ import ci_guard
 ROOT = Path(__file__).resolve().parent.parent
 VERSION_FILE = ROOT / "app/pubspec.yaml"
 VERSION_LINE = re.compile(r"^version: (\d+)\.(\d+)\.(\d+)\+(\d+)$", re.MULTILINE)
+BUMP_PARTS = ("major", "minor", "patch")
 TAG_PREFIX = "app-v"   # .github/workflows/android.yml `tags: ["app-v*"]` must match
 DIST = ROOT / "app/build/dist"   # inside the gitignored app/build/
 
@@ -116,11 +117,25 @@ def read_version():
     return tuple(int(n) for n in found[0])
 
 
+def bump_target(text):
+    """argparse type: major|minor|patch, or an explicit X.Y.Z+N (any direction, no ordering check)."""
+    if text in BUMP_PARTS:
+        return text
+    found = VERSION_LINE.fullmatch(f"version: {text}")
+    if not found:
+        raise argparse.ArgumentTypeError(f"expected one of {BUMP_PARTS} or X.Y.Z+N (e.g. 0.0.0+1), got {text!r}")
+    return tuple(int(n) for n in found.groups())
+
+
 def bump(part, dry_run):
     major, minor, patch, code = read_version()
-    major, minor, patch = {
-        "major": (major + 1, 0, 0), "minor": (major, minor + 1, 0), "patch": (major, minor, patch + 1),
-    }[part]
+    if isinstance(part, tuple):
+        major, minor, patch, code = part
+        code -= 1   # the line below writes code + 1
+    else:
+        major, minor, patch = {
+            "major": (major + 1, 0, 0), "minor": (major, minor + 1, 0), "patch": (major, minor, patch + 1),
+        }[part]
     version = f"{major}.{minor}.{patch}"
     tag = TAG_PREFIX + version
     dirty = run(["git", "status", "--porcelain", "--untracked-files=no"], capture=True)
@@ -171,7 +186,7 @@ def main():
         if cmd == "release":
             p.add_argument("--dry-run", action="store_true")
     p = sub.add_parser("bump")
-    p.add_argument("part", choices=("major", "minor", "patch"))
+    p.add_argument("part", type=bump_target, metavar="{major,minor,patch,X.Y.Z+N}")
     p.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     names = getattr(args, "platforms", None) or list(PLATFORMS)
