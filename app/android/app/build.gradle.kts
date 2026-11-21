@@ -20,7 +20,11 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        ndk { abiFilters += "arm64-v8a" }
+        // arm64 only, except the per-ABI split build (see ../build.gradle.kts); Flutter rejects
+        // abiFilters together with ABI splits.
+        if (project.findProperty("split-per-abi") != "true") {
+            ndk { abiFilters += "arm64-v8a" }
+        }
     }
 
     buildTypes {

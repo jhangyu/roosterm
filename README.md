@@ -84,6 +84,9 @@ flutter build apk
 ```
 <!-- evidence: app/README.md:5-8; docs/logs/2026-11-21-refactor2.md "Android release stays debug-signed" -->
 
+Release and CI: `python3 scripts/ci.py bump patch` (or `minor`/`major`) bumps `app/pubspec.yaml`, commits it and creates tag `app-vX.Y.Z`. It refuses to run when tracked files have uncommitted changes (untracked files are ignored) or when the tag already exists. `git push origin HEAD app-vX.Y.Z` then triggers `.github/workflows/android.yml`. That workflow runs the test guard (`ci.py guard`; CI never runs tests), builds per-ABI release APKs (`ci.py build android`), and publishes a GitHub Release with `us.jhangy.roosterm-{arm64-v8a,armeabi-v7a,x86_64}.apk`. The release uses the built-in `GITHUB_TOKEN`, so no secrets are needed. Locally, `git config core.hooksPath .githooks` makes every push run `python3 scripts/ci.py prepush` (guard + the same build, output in `app/build/dist/`). A plain `flutter build apk` stays arm64-only; only the per-ABI split build includes all three ABIs.
+<!-- evidence: .github/workflows/android.yml; scripts/ci.py PLATFORMS, bump, release; scripts/ci_guard.py; .githooks/pre-push; app/android/build.gradle.kts split-per-abi -->
+
 ### First-time setup
 
 1. Install `hc` and `roosterm` into `~/.local/bin` (the service units expect that path).
