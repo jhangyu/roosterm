@@ -43,7 +43,7 @@ export function KeyBar({ disabled, ctrlLatched, onToggleCtrl, onKey }: KeyBarPro
       {key("Down", () => onKey("down"), <ArrowDownIcon className={ICON} />)}
       {key("Right", () => onKey("right"), <ArrowRightIcon className={ICON} />)}
       <span className="mx-0.5 my-1.5 w-px shrink-0 bg-foreground/[0.08]" aria-hidden />
-      {key("Tab", () => onKey("tab"), <><KeyboardTabIcon className={ICON} />Tab</>)}
+      {key("Tab", () => onKey("tab"), <KeyboardTabIcon className={ICON} />)}
       {key("Shift+Tab", () => onKey("shift-tab"), <ArrowSyncIcon className={ICON} />)}
       <Button
         type="button"
