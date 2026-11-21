@@ -19,6 +19,8 @@ Contract: `docs/logs/contract-server-package.md`.
 - Installer, isolated (temp HOME, PATH shims, `/usr/bin/python3` 3.9.6): fresh, re-run keep (config and sessions.json byte-identical), listen change, quarantine, XDG refusal — all pass; real Mac binary, config and launchd job unchanged. VM `roosterm-spike`: isolated runs pass; live systemd install active, HTTP 200; hc core and a terminal program survive uninstall and re-install; stand-in unit shows KillMode=process keeps the child alive (default kills it).
 - Review (opus): 1 blocker (uninstall could kill hc core), 2 should-fix (XDG config path, secrets visible to npm build), 3 nits — all fixed and re-checked: mergeable.
 
+## Live release
+- `app-v0.0.1` (merge commit 7a3417c, tag commit 7a647fa): GitHub Actions run 44870926585 succeeded in 11m9s; release "roosterm 0.0.1" has the 3 APKs + 4 server tarballs; downloaded `us.jhangy.roosterm-arm64-v8a.apk` → apksigner signer SHA-256 `f87d4271…17fd` (the fixed key).
+
 ## Not yet proven
-- Live cloud release with the fixed key (first `app-v*` tag after this commit).
 - `loginctl enable-linger` prompt path (VM already had linger on).
