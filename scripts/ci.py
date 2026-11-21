@@ -11,13 +11,16 @@
                                        on CI: publish the tag's GitHub Release with the collected files
 """
 import argparse
+import base64
+import binascii
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-from typing import NamedTuple
+from typing import Callable, NamedTuple, Optional
 
 sys.dont_write_bytecode = True   # importing ci_guard must not leave scripts/__pycache__ (not gitignored)
 import ci_guard
@@ -36,9 +39,43 @@ class Platform(NamedTuple):
     command: tuple      # argv literal; keep it a literal so ci_guard can scan it
     archs: tuple        # one release file per arch
     output: str         # repo-relative build output, {arch} placeholder
-    name_source: str    # repo-relative file holding the package name
-    name_key: str       # regex with one group: the package name
+    name_source: Optional[str]   # repo-relative file holding the package name; None = no {package} in release_name
+    name_key: Optional[str]      # regex with one group: the package name
     release_name: str   # final file name, {package} and {arch} placeholders
+    prepare_env: Optional[Callable[[Path], dict]]   # (tmp_dir) -> extra env for the build command
+
+
+KEYSTORE_ENV = "ANDROID_KEYSTORE_BASE64"
+KEYSTORE_FILE_ENV = "ANDROID_KEYSTORE_FILE"
+SIGNING_ENV = ("ANDROID_KEYSTORE_PASSWORD", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD")
+
+
+def android_signing_env(tmp):
+    """Decode the release keystore from env into tmp; Gradle reads ANDROID_KEYSTORE_FILE and the 3 SIGNING_ENV."""
+    keystore = os.environ.get(KEYSTORE_ENV, "")
+    if not keystore:
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            fail(f"android: expected secrets {KEYSTORE_ENV}, {', '.join(SIGNING_ENV)} set in CI, "
+                 f"got missing {[KEYSTORE_ENV, *[n for n in SIGNING_ENV if not os.environ.get(n)]]}")
+        if not os.environ.get(KEYSTORE_FILE_ENV):
+            print(f"ci: android: {KEYSTORE_ENV} and {KEYSTORE_FILE_ENV} not set; "
+                  "APKs are DEBUG-signed and cannot update a release install")
+            return {}
+        keystore_source = KEYSTORE_FILE_ENV   # local keystore file: Gradle reads it from the inherited env
+    else:
+        keystore_source = KEYSTORE_ENV
+    missing = [n for n in SIGNING_ENV if not os.environ.get(n)]
+    if missing:
+        fail(f"android: expected {', '.join(SIGNING_ENV)} set with {keystore_source}, got missing {missing}")
+    if keystore_source == KEYSTORE_FILE_ENV:
+        return {}
+    try:
+        data = base64.b64decode(keystore, validate=True)
+    except binascii.Error as e:
+        fail(f"android: expected {KEYSTORE_ENV} to be valid base64 ({len(keystore)} chars given): {e}")
+    path = tmp / "release.jks"
+    path.write_bytes(data)
+    return {KEYSTORE_FILE_ENV: str(path)}
 
 
 # One entry per platform. Adding a platform = one entry here + its steps in the workflow.
@@ -52,6 +89,19 @@ PLATFORMS = {
         name_source="app/android/app/build.gradle.kts",
         name_key=r'^\s*applicationId\s*=\s*"([^"]+)"',
         release_name="{package}-{arch}.apk",
+        prepare_env=android_signing_env,
+    ),
+    "server": Platform(
+        workdir=".",
+        tools=("go", "npm"),
+        command=("python3", "scripts/build.py", "--package",
+                 "darwin/arm64", "darwin/amd64", "linux/amd64", "linux/arm64"),
+        archs=("darwin-arm64", "darwin-amd64", "linux-amd64", "linux-arm64"),   # keep in step with command
+        output="build/roosterm-server-{arch}.tar.gz",
+        name_source=None,
+        name_key=None,
+        release_name="roosterm-server-{arch}.tar.gz",
+        prepare_env=None,
     ),
 }
 
@@ -60,8 +110,8 @@ def fail(message):
     raise SystemExit(f"ci: {message}")
 
 
-def run(argv, cwd=ROOT, capture=False):
-    result = subprocess.run(argv, cwd=cwd, text=True, capture_output=capture)
+def run(argv, cwd=ROOT, capture=False, env=None):
+    result = subprocess.run(argv, cwd=cwd, text=True, capture_output=capture, env=env)
     if result.returncode != 0:
         detail = f": {result.stderr.strip()}" if capture else ""
         fail(f"{' '.join(argv)} in {cwd} exited {result.returncode}, expected 0{detail}")
@@ -79,7 +129,12 @@ def package_name(platform):
 def release_files(name):
     """The exact files `build` produces and `release` uploads for this platform."""
     platform = PLATFORMS[name]
-    package = package_name(platform)
+    if platform.name_source is None:
+        if "{package}" in platform.release_name:
+            fail(f"{name}: release_name {platform.release_name!r} uses {{package}}, expected a name_source")
+        package = None
+    else:
+        package = package_name(platform)
     return [DIST / platform.release_name.format(package=package, arch=a) for a in platform.archs]
 
 
@@ -88,11 +143,17 @@ def build(name):
     missing = [t for t in platform.tools if shutil.which(t) is None]
     if missing:
         fail(f"{name}: expected {missing} on PATH, not found (PATH={os.environ.get('PATH')!r})")
+    with tempfile.TemporaryDirectory() as tmp:   # outside the repo; holds the decoded keystore
+        extra = platform.prepare_env(Path(tmp)) if platform.prepare_env else {}
+        _build(name, platform, dict(os.environ, **extra))
+
+
+def _build(name, platform, env):
     outputs = [ROOT / platform.output.format(arch=a) for a in platform.archs]
     targets = release_files(name)
     for stale in outputs + targets:   # a stale file must not pass the checks below
         stale.unlink(missing_ok=True)
-    run(platform.command, cwd=ROOT / platform.workdir)
+    run(platform.command, cwd=ROOT / platform.workdir, env=env)
     absent = [str(p.relative_to(ROOT)) for p in outputs if not p.is_file()]
     if absent:
         fail(f"{name}: expected build outputs {absent} after a successful build, not found")
@@ -168,7 +229,7 @@ def release(names, dry_run):
     if absent:
         fail(f"expected release files {absent}, not found; run `ci.py build` first")
     argv = ["gh", "release", "create", tag, *map(str, files), "--verify-tag",
-            "--title", f"roosterm app {major}.{minor}.{patch}",
+            "--title", f"roosterm {major}.{minor}.{patch}",
             "--notes", sha]
     print("ci: " + " ".join(argv))
     if not dry_run:

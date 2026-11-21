@@ -56,7 +56,7 @@ roosterm 只是終端機外殼：它不解析 Claude Code，也沒有聊天介�
 browser / Flutter WebView ──HTTPS (你的反向代理)──▶ roosterm (單一 Go 執行檔) ──Unix socket, JSON-RPC──▶ herdr-core (hc)
 ```
 
-- herdr-core（`hc`，版本 0.1.21）是讓終端機持續執行的程式，它持有每個終端機與裡面的程式。roosterm 不負責安裝它。
+- herdr-core（`hc`，版本 0.1.21）是讓終端機持續執行的程式，它持有每個終端機與裡面的程式。若主機上沒有它，roosterm 安裝程式會幫你安裝。
   <!-- evidence: docs/hc-bridge.md:1; deploy/README.md:3 -->
 - roosterm 是同一台機器上的一支程式：它提供登入頁與終端機畫面，並透過本機 socket 與 `hc` 溝通。它不保存任何終端機狀態。
   <!-- evidence: docs/design.md:15; host/cmd/roosterm/serve.go:56-57 -->
@@ -68,35 +68,78 @@ browser / Flutter WebView ──HTTPS (你的反向代理)──▶ roosterm (�
 本節列出你需要準備的東西。
 
 - 主機：macOS 或 Linux（不支援 Windows 主機）。
-  <!-- evidence: docs/design.md:7; scripts/service.py:176-177; deploy/systemd/ -->
-- `hc` 0.1.21（在下一節安裝）。啟動時若連不到 `hc` 的 socket，roosterm 會報錯並結束。
+  <!-- evidence: docs/design.md:7; deploy/install.py:166-167; deploy/systemd/ -->
+- Python 3.9 或更新版本，用來執行安裝程式（macOS 內建的 `python3` 就夠），以及 `curl` 與 `tar`，安裝程式用它們下載 `hc`。
+  <!-- evidence: deploy/install.py:164-165,239-242; docs/logs/contract-server-package.md:9 -->
+- `hc` 0.1.21（由安裝程式設定）。啟動時若連不到 `hc` 的 socket，roosterm 會報錯並結束。
   <!-- evidence: host/internal/hc/supervisor.go:26-32; docs/design.md:35 -->
-- 建置 roosterm 需要：`git`、Go 1.26.11、Node.js 與 npm、Python 3。
-  <!-- evidence: host/go.mod:3; scripts/build.py:39-45 -->
+- 只有從原始碼建置 roosterm 時才需要：`git`、Go 1.26.11、Node.js 與 npm、Python 3。
+  <!-- evidence: host/go.mod:3; scripts/build.py:77-82,98 -->
 - 一個有 HTTPS 的網域或位址，由你自己架設的反向代理提供（任何支援 WebSocket 的代理都可以）。
   <!-- evidence: docs/api.md:16; host/internal/web/server.go:35 (GET /ws/tabs/{id}) -->
 - 選用：一支 Android 手機，用來裝 App。
-- 注意：沒有預先建置好的伺服器執行檔。GitHub Releases 只提供 Android App。
-  <!-- evidence: scripts/ci.py:44-55 (PLATFORMS has only android) -->
+- 一份適合你主機的預先建置伺服器套件，從 [GitHub Releases](https://github.com/jhangyu/roosterm/releases) 下載（見〈安裝〉）。
+  <!-- evidence: scripts/ci.py:94-105; .github/workflows/android.yml:34-45 -->
 
 ## 安裝
 
-本節把 `hc` 與 `roosterm` 裝到主機上。
+本節把 `hc` 與 `roosterm` 裝到主機上，並以服務執行。
 
-### 安裝 hc
+### 用伺服器套件安裝
 
-用 herdr-core 自己的安裝腳本（herdr-core 儲存庫中的 `distribution/install.sh`），把 0.1.21 版裝到 `~/.local/bin`：
+本步驟下載一個套件，並執行其中的互動式安裝程式。
 
-```sh
-HC_VERSION=0.1.21 HC_INSTALL_DIR=$HOME/.local/bin sh install.sh
-```
-<!-- evidence: docs/logs/2026-11-19-spike-hc.md:35,37 -->
+1. 開啟 [GitHub Releases](https://github.com/jhangyu/roosterm/releases)，下載適合你主機的套件：
 
-安裝腳本會檢查 sha256，在 macOS 上還會檢查程式碼簽章。裝好後，`~/.local/bin/hc --version` 應印出 `hc 0.1.21`。
+   | 檔案 | 主機 |
+   |---|---|
+   | `roosterm-server-darwin-arm64.tar.gz` | Apple silicon 的 Mac |
+   | `roosterm-server-darwin-amd64.tar.gz` | Intel Mac |
+   | `roosterm-server-linux-amd64.tar.gz` | Linux x86_64 |
+   | `roosterm-server-linux-arm64.tar.gz` | Linux ARM64 |
+   <!-- evidence: scripts/ci.py:94-105; docs/logs/contract-server-package.md:27-30 -->
+2. 解壓縮，並在你平常的登入 shell 執行安裝程式（請把檔名換成你下載的檔案）：
 
-### 建置並安裝 roosterm
+   ```sh
+   tar xzf roosterm-server-darwin-arm64.tar.gz
+   python3 roosterm-server-darwin-arm64/install.py
+   ```
+3. 依提示回答。安裝程式會：
+   - 把 `roosterm` 複製到 `~/.local/bin`，並確認它能在這台機器上執行（在 macOS 上，還會清除下載時附加在檔案上的 quarantine 旗標，因為你選擇執行這個套件）；
+   - 當 `hc` 不存在或版本較舊時，用 herdr 官方安裝腳本安裝 `hc` 0.1.21；已安裝的 `hc` 若是 0.1.21 或更新則保留；
+   - 詢問登入 shell、監聽位址（預設 `127.0.0.1:8787`）、使用者名稱與密碼，並寫入 `~/.config/roosterm/config.toml`；
+   - 安裝並啟動服務（macOS 是 launchd 工作，Linux 是 systemd 使用者單元；在 Linux 上還會詢問是否執行 `loginctl enable-linger`，讓 roosterm 開機就啟動），最後印出要開啟的位址。
+   <!-- evidence: deploy/install.py:199-203,321-344; scripts/ci.py:94-105 -->
 
-1. 下載原始碼並建置：
+- 要升級或重新設定，再執行一次 `python3 install.py`（在解壓縮後的資料夾中）。已有設定檔時，它會顯示目前的監聽位址、shell 與使用者名稱，然後詢問 `Keep listen address and shell? [Y/n]` 與 `Change username/password? [y/N]`。登入狀態會保留，執行中的程式也不會被停止。
+  <!-- evidence: deploy/install.py:256-277,194-212; docs/logs/contract-server-package.md:9 -->
+- 在同一個資料夾控制服務：
+
+  ```sh
+  python3 install.py status      # service state and whether the port answers
+  python3 install.py restart     # also: start, stop, uninstall
+  ```
+
+  `uninstall` 只移除服務檔；`hc` 會繼續執行，設定檔與登入狀態也都保留。
+  <!-- evidence: deploy/install.py:387-444,471-480 -->
+- 當 `XDG_CONFIG_HOME` 設成 `~/.config` 以外的值時，安裝程式會拒絕執行，因為服務讀取的是 `~/.config/roosterm`；安裝時請先取消設定。
+  <!-- evidence: deploy/install.py:188-192 -->
+- HTTPS 仍需你自己處理：見[設定 HTTPS](#設定-https)。
+
+### 手動安裝（進階）
+
+本步驟以手動方式完成安裝程式做的事，並從原始碼建置 roosterm。下面的〈建立登入帳號〉、〈設定檔〉與〈啟動伺服器〉詳細說明同樣的結果。
+
+1. 用 herdr-core 官方安裝腳本（`https://releases.herdr.dev/core/install.sh`）把 `hc` 0.1.21 裝到 `~/.local/bin`。安裝腳本會檢查 sha256，在 macOS 上還會檢查程式碼簽章。
+
+   ```sh
+   curl -fsSL https://releases.herdr.dev/core/install.sh -o install.sh
+   HC_VERSION=0.1.21 HC_INSTALL_DIR=$HOME/.local/bin sh install.sh
+   ```
+
+   裝好後，`~/.local/bin/hc --version` 應印出 `hc 0.1.21`。
+   <!-- evidence: https://releases.herdr.dev/core/install.sh (HTTP 200); docs/logs/2026-11-19-spike-hc.md:35,37 -->
+2. 下載原始碼並建置：
 
    ```sh
    git clone https://github.com/jhangyu/roosterm.git
@@ -105,25 +148,26 @@ HC_VERSION=0.1.21 HC_INSTALL_DIR=$HOME/.local/bin sh install.sh
    ```
 
    結果是 `build/roosterm`。腳本會先對網頁用戶端執行 `npm ci` 與 `npm run build`，再以 `CGO_ENABLED=0` 執行 `go build -trimpath`，最後印出 `wrote build/roosterm`。
-   <!-- evidence: git remote -v; scripts/build.py:31,39-46 -->
-2. 把執行檔複製到 `~/.local/bin`：
+   <!-- evidence: git remote -v; scripts/build.py:77-82,98-99 -->
+3. 把執行檔複製到 `~/.local/bin`：
 
    ```sh
    mkdir -p ~/.local/bin
    cp build/roosterm ~/.local/bin/
    ```
 
-   後面的服務設定檔預期 `hc` 與 `roosterm` 都在 `~/.local/bin`。
-   <!-- evidence: scripts/service.py:27,92-94; deploy/systemd/roosterm.service:7; deploy/launchd/dev.roosterm.serve.plist:11 -->
+   〈啟動伺服器〉的服務設定檔預期 `hc` 與 `roosterm` 都在 `~/.local/bin`。
+   <!-- evidence: deploy/systemd/roosterm.service:7; deploy/launchd/dev.roosterm.serve.plist:11 -->
 
 - 在一台機器上為另一台建置：`python3 scripts/build.py --target linux/arm64` 會產生 `build/roosterm-linux-arm64`；`--target` 接受 `GOOS/GOARCH`。把該檔案複製到主機的 `~/.local/bin/roosterm` 即可。
-  <!-- evidence: scripts/build.py:4-5,29,33-38 -->
+  <!-- evidence: scripts/build.py:4-5,36-41,94-99 -->
+- 自己建置伺服器套件：執行 `python3 scripts/build.py --package darwin/arm64 linux/amd64`，每個目標都會產生 `build/roosterm-server-<os>-<arch>.tar.gz`。
+  <!-- evidence: scripts/build.py:6,70-72; docs/logs/contract-server-package.md:8 -->
 - 日後更新：重新建置、再複製一次、重啟服務（見〈啟動伺服器〉）。
-  <!-- evidence: scripts/service.py:27,92-94 -->
 
 ## 建立登入帳號
 
-本節建立你的登入帳號。
+本節以手動方式建立你的登入帳號；安裝程式會替你完成這件事。
 
 ```sh
 ~/.local/bin/roosterm passwd
@@ -179,10 +223,10 @@ password_hash = "$argon2id$v=19$m=65536,t=3,p=4$<salt b64>$<key b64>"
 
 ## 啟動伺服器
 
-本節讓 roosterm 跑起來。
+本節讓 roosterm 跑起來。安裝程式已設定好服務，所以只有手動安裝，或想在前景試跑時才需要這一節。
 
 **切勿在正在使用的主機上執行 `hc server stop`，它會結束每個分頁中的所有程式。** 下面的指令都不會停止 hc。
-<!-- evidence: deploy/README.md:5; scripts/service.py:11 -->
+<!-- evidence: deploy/README.md:5; deploy/install.py -->
 
 ### 先在前景試跑
 
@@ -206,26 +250,28 @@ password_hash = "$argon2id$v=19$m=65536,t=3,p=4$<salt b64>$<key b64>"
 
 ### 在 macOS 以服務執行
 
+本步驟安裝一個 launchd 工作，替你啟動 hc 與 roosterm。
+
 ```sh
-python3 scripts/service.py install    # install and load the launchd job
-python3 scripts/service.py status     # loaded, pid, last exit code, whether the port answers
-python3 scripts/service.py restart    # also: start, stop, uninstall
+python3 deploy/install.py --binary build/roosterm    # install and load the launchd job
+python3 deploy/install.py status                      # loaded, pid, last exit code, whether the port answers
+python3 deploy/install.py restart                     # also: start, stop, uninstall
 ```
 
-- 請在 roosterm 資料夾中執行。`install` 會先檢查 `~/.local/bin/hc` 與 `~/.local/bin/roosterm` 是否存在。
-  <!-- evidence: scripts/service.py:21-27,91-101 -->
+- 請在 roosterm 資料夾中執行。第一個指令就是套件附的同一個安裝程式，指向你自己建置的執行檔；沒有設定檔時，它也會詢問登入與設定。
+  <!-- evidence: deploy/install.py:478,387-473 -->
 - 這個服務會先啟動 `hc server start`，再啟動 `roosterm serve`，在登入時啟動，崩潰後也會重啟（正常結束則不重啟）。
   <!-- evidence: deploy/launchd/dev.roosterm.serve.plist:9-19; deploy/README.md:15 -->
 - 服務檔會放在 `~/Library/LaunchAgents`，日誌位於 `~/Library/Logs/roosterm.log`。
-  <!-- evidence: scripts/service.py:26 -->
-- 服務使用 `/bin/zsh -lc`；若你的登入 shell 不是 zsh，請修改 `deploy/launchd/dev.roosterm.serve.plist` 裡的 `/bin/zsh`，再執行一次 `install`。
-  <!-- evidence: deploy/launchd/dev.roosterm.serve.plist:9-10; deploy/README.md:15 -->
+  <!-- evidence: deploy/install.py:45-50,280-290 -->
+- 服務以你選擇的登入 shell 加上 `-lc` 執行，安裝程式會把該 shell 寫進服務檔。
+  <!-- evidence: deploy/launchd/dev.roosterm.serve.plist:9-10; deploy/install.py:285-288 -->
 - `stop` 不會停止 hc；服務會在下次登入或執行 `start` 時重新載入。
-  <!-- evidence: scripts/service.py:129-135 -->
+  <!-- evidence: deploy/install.py:403-414 -->
 
 ### 在 Linux 以服務執行
 
-這裡用兩個 systemd 使用者單元：`herdr-core.service` 執行 `hc server start`；`roosterm.service` 依賴它，並在失敗時重啟 roosterm。
+這裡用兩個 systemd 使用者單元：`herdr-core.service` 執行 `hc server start`；`roosterm.service` 依賴它，並在失敗時重啟 roosterm。安裝程式做的是同樣的事；下面是手動指令。
 
 ```sh
 mkdir -p ~/.config/systemd/user
@@ -236,8 +282,8 @@ loginctl enable-linger "$USER"   # start at boot without a login session
 ```
 
 - 日誌：`journalctl --user -u roosterm.service`。
-- 停止 roosterm（hc 繼續執行）：`systemctl --user stop roosterm.service`。停止 `herdr-core.service` 也不會停止 hc（該單元沒有 `ExecStop`）。
-<!-- evidence: deploy/systemd/herdr-core.service:5-7; deploy/systemd/roosterm.service:2-8; deploy/README.md:21-29 -->
+- 停止 roosterm（hc 繼續執行）：`systemctl --user stop roosterm.service`。停止 `herdr-core.service` 也不會停止 hc（該單元設有 `KillMode=process`，停止它不會影響 hc）。
+<!-- evidence: deploy/systemd/herdr-core.service:9-10; deploy/systemd/roosterm.service:2-8; deploy/README.md:21-29 -->
 
 ## 設定 HTTPS
 
@@ -267,14 +313,16 @@ loginctl enable-linger "$USER"   # start at boot without a login session
    - `us.jhangy.roosterm-arm64-v8a.apk`：大多數現行手機。
    - `us.jhangy.roosterm-armeabi-v7a.apk`：較舊的 32 位元手機。
    - `us.jhangy.roosterm-x86_64.apk`：模擬器與 x86 裝置。
-   <!-- evidence: gh release view app-v0.0.0 --repo jhangyu/roosterm (assets); scripts/ci.py:49,54; app/android/app/build.gradle.kts:18 -->
-2. 在手機上開啟該檔案，Android 詢問時，允許從這個來源安裝（側載，即不經 Play Store 安裝 APK）。這個 APK 以 debug 金鑰簽章，因為它沒有上架 Play Store。
-   <!-- evidence: app/android/app/build.gradle.kts:31-33 -->
+   <!-- evidence: gh release view app-v0.0.0 --repo jhangyu/roosterm (assets); scripts/ci.py:83-93; app/android/app/build.gradle.kts:18 -->
+2. 在手機上開啟該檔案，Android 詢問時，允許從這個來源安裝（側載，即不經 Play Store 安裝 APK）。Releases 的 APK 都用同一把固定金鑰簽章，所以新版 APK 可以直接覆蓋安裝舊版，並保留你儲存的主機。
+   <!-- evidence: app/android/app/build.gradle.kts:30-57; docs/logs/contract-server-package.md:10 -->
 3. 在 App 中新增主機：填入名稱與 `https://` 位址（`http://` 會被拒絕，因為登入 cookie 帶有 `Secure`）。開啟該主機後登入。
    <!-- evidence: app/lib/hosts.dart:11-20 -->
 
 - App 只載入該主機位址下的頁面。指向其他網站的連結會被擋下，並顯示該網址的提示。App 只有 Android 版，沒有 iOS 版。
   <!-- evidence: app/lib/hosts.dart:24-32; app/lib/host_page.dart:29-34; app/README.md:3 -->
+- 已安裝 0.0.0 版的手機必須先解除安裝一次，因為那個 APK 是用用完即丟的金鑰簽章，App 內儲存的主機會遺失。之後的版本可直接覆蓋更新。
+  <!-- evidence: docs/logs/contract-server-package.md:10; gh release view app-v0.0.0 -->
 - 想自己建置 App，見[自行建置 Android App](#自行建置-android-app)。
 
 ## 安全性說明
@@ -313,22 +361,43 @@ flutter build apk
 ```
 
 - 一般的 `flutter build apk` 只建置 arm64。`python3 scripts/ci.py build android` 會建置三種 ABI（各一個 APK），輸出到 `app/build/dist/`，檔名與 Releases 的檔案相同。
-  <!-- evidence: app/android/app/build.gradle.kts:23-27; app/android/build.gradle.kts:3-10; scripts/ci.py:6,30,45-55 -->
-- Release 建置刻意使用 debug 金鑰（供側載）。
-  <!-- evidence: app/android/app/build.gradle.kts:31-33 -->
+  <!-- evidence: app/android/app/build.gradle.kts:23-27; app/android/build.gradle.kts:3-10; scripts/ci.py:7,83-105 -->
+- 本機的 release 建置預設用 debug 金鑰簽章，除非設定了 `ANDROID_KEYSTORE_FILE`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS` 與 `ANDROID_KEY_PASSWORD`。debug 簽章的 APK 不能覆蓋安裝 release 版，反之亦然；只設定其中一部分時，建置會報錯並停止。
+  <!-- evidence: app/android/app/build.gradle.kts:30-57 -->
 
 ## 發布與 CI
 
 本節說明如何發布新版本。
 
 1. `python3 scripts/ci.py bump patch`（或 `minor`、`major`，或明確的 `X.Y.Z+N`，如 `bump 0.0.0+1`）會更新 `app/pubspec.yaml`、提交，並建立標籤 `app-vX.Y.Z`；它不會 push。加上 `--dry-run` 只顯示變更。
-   <!-- evidence: scripts/ci.py:8-9,120-154 -->
+   <!-- evidence: scripts/ci.py:8-9,191-216 -->
 2. 已追蹤檔案有未提交的變更（未追蹤檔案不計），或標籤已存在時，它會拒絕執行。
-   <!-- evidence: scripts/ci.py:141-145 -->
-3. `git push origin HEAD app-vX.Y.Z` 會觸發 `.github/workflows/android.yml`：先跑測試防護（`ci.py guard`；CI 永不跑測試），再建置各 ABI 的 APK（`ci.py build android`），最後發佈 GitHub Release，附上三個 APK。發佈使用內建的 `GITHUB_TOKEN`，不需設定 secrets。
-   <!-- evidence: .github/workflows/android.yml:1-29; scripts/ci.py:1-11,154,157-175; scripts/ci_guard.py:1-3 -->
+   <!-- evidence: scripts/ci.py:202-206 -->
+3. `git push origin HEAD app-vX.Y.Z` 會觸發 `.github/workflows/android.yml`：先跑測試防護（`ci.py guard`；CI 永不跑測試），再建置各 ABI 的 APK（`ci.py build android`）與四個伺服器套件（`ci.py build server`），最後發佈一個標題為 `roosterm X.Y.Z` 的 GitHub Release，附上三個 APK 與四個套件。建置需要下面說明的四個簽章 secrets，缺少時會失敗。
+   <!-- evidence: .github/workflows/android.yml:33-45; scripts/ci.py:82-105,232; scripts/ci_guard.py:2-6 -->
 4. 本機 hook：執行 `git config core.hooksPath .githooks` 後，每次 push 都會跑 `python3 scripts/ci.py prepush`（防護加上同一套建置，輸出在 `app/build/dist/`）。
-   <!-- evidence: .githooks/pre-push; scripts/ci.py:7,30 -->
+   <!-- evidence: .githooks/pre-push; ci.py:7,243,256 -->
+
+### 維護者：固定簽章金鑰
+
+本步驟建立簽署每個 release APK 的唯一金鑰，只需在你自己的機器上做一次。
+
+```sh
+mkdir -p ~/.config/roosterm
+keytool -genkeypair -v -storetype PKCS12 -keystore ~/.config/roosterm/release-key.jks \
+  -alias roosterm -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=roosterm"
+base64 -i ~/.config/roosterm/release-key.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_PASSWORD
+printf roosterm | gh secret set ANDROID_KEY_ALIAS
+```
+
+- 金鑰檔放在 `~/.config/roosterm/release-key.jks`。金鑰檔與其密碼只讓你自己能讀。PKCS12 的金鑰密碼與儲存庫密碼相同，所以兩個 secret 填同一個值。
+  <!-- evidence: docs/logs/contract-server-package.md:29; keytool -help -->
+- 四個 GitHub Actions secrets 是 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS` 與 `ANDROID_KEY_PASSWORD`。CI 把 base64 secret 還原成暫存金鑰檔，並以 `ANDROID_KEYSTORE_FILE` 傳給 Gradle。
+  <!-- evidence: docs/logs/contract-server-package.md:10; scripts/ci.py:48-78; app/android/app/build.gradle.kts:30-57 -->
+- 請備份金鑰檔與密碼（密碼管理器加一份離線副本）。**若遺失金鑰，所有手機都無法覆蓋更新：每位使用者都必須解除安裝後重新安裝 App。** 不要把金鑰提交進儲存庫；`app/android/.gitignore` 已忽略 `*.jks`。
+  <!-- evidence: app/android/.gitignore:12-13 -->
 
 ## 開發與測試
 
@@ -357,9 +426,9 @@ host/cmd/roosterm/   main, serve, passwd
 host/internal/       api, apierr, atomicfile, auth, bridge, config, hc, swarm, web
 web/src/             api, components, lib, screens, terminal, workspace, styles
 app/lib/             Flutter host list and WebView pages
-deploy/              systemd units, launchd plist, deploy/README.md
+deploy/              install.py, systemd units, launchd plist, deploy/README.md
 docs/                design.md, api.md, hc-bridge.md, logs/
-scripts/             build.py, service.py, test.py, ci.py, ci_guard.py
+scripts/             build.py, test.py, ci.py, ci_guard.py
 .github/workflows/   android.yml
 .githooks/           pre-push
 ```

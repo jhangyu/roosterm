@@ -21,9 +21,25 @@ jobs:
         with:
           channel: stable
           flutter-version: "3.44.6"
-      - name: Build
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: host/go.mod
+          cache-dependency-path: host/go.sum
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "26.13.0"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build server
+        run: python3 scripts/ci.py build server
+      - name: Build Android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: python3 scripts/ci.py build android
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/ci.py release android
+        run: python3 scripts/ci.py release android server

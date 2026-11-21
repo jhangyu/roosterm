@@ -27,10 +27,32 @@ android {
         }
     }
 
+    // Release signing comes from the environment (CI secrets or a local export). ci.py enforces
+    // that CI always sets it; without it a local build stays debug-signed.
+    val keystoreFile = providers.environmentVariable("ANDROID_KEYSTORE_FILE").orNull
+    if (!keystoreFile.isNullOrEmpty()) {
+        val secrets = listOf("ANDROID_KEYSTORE_PASSWORD", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD")
+            .associateWith { providers.environmentVariable(it).orNull.orEmpty() }
+        val missing = secrets.filterValues { it.isEmpty() }.keys
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "expected ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD " +
+                    "with ANDROID_KEYSTORE_FILE=$keystoreFile, missing $missing"
+            )
+        }
+        signingConfigs.create("release") {
+            storeFile = file(keystoreFile)
+            storePassword = secrets.getValue("ANDROID_KEYSTORE_PASSWORD")
+            keyAlias = secrets.getValue("ANDROID_KEY_ALIAS")
+            keyPassword = secrets.getValue("ANDROID_KEY_PASSWORD")
+        }
+    } else {
+        logger.warn("ANDROID_KEYSTORE_FILE not set: release is DEBUG-signed and cannot update a release install")
+    }
+
     buildTypes {
         release {
-            // Release is signed with the debug key on purpose: the app is sideloaded, not published.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (keystoreFile.isNullOrEmpty()) "debug" else "release")
         }
     }
 }

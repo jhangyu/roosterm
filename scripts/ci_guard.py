@@ -2,7 +2,8 @@
 """Fail when CI could run a test, or when a workflow step runs anything but a Python CI script. CI only compiles.
 
 Scanned: every `run:` value in .github/workflows/*.y*ml, every line of .githooks/pre-push, and every argv
-literal (list/tuple of str constants) in each scripts/*.py those two reference.
+literal (list/tuple of str constants) in each scripts/*.py those two reference, and transitively in every
+scripts/*.py named by a string constant of a scanned script (ci.py -> build.py).
 This file is excluded from the argv scan, because its rule tables would match. That is safe because the
 guard cannot start a process: if this file imports subprocess or calls os.system/popen/exec*/spawn*, the guard fails.
 
@@ -212,9 +213,13 @@ def check(root):
             for script in SCRIPT_REF.findall(line):
                 referenced.setdefault(script, f"{HOOK}:{line_no}")
 
-    for script, where in sorted(referenced.items()):
-        if script == SELF:
+    pending = sorted(referenced.items())
+    seen = set()
+    while pending:  # transitive: a scanned script's string constants may name further scripts
+        script, where = pending.pop(0)
+        if script == SELF or script in seen:
             continue
+        seen.add(script)
         if not (root / script).is_file():
             violations.append(f"{MISSING}; {where}: {script}")
             continue
@@ -225,6 +230,10 @@ def check(root):
             violations.append(f"{NO_TESTS}; {script}:{line_no} argv: {text}")
         for line_no, text in process_violations(tree):
             violations.append(f"{ARGV_ONLY}; {script}:{line_no}: {text}")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                for ref in SCRIPT_REF.findall(node.value):
+                    pending.append((ref, f"{script}:{node.lineno}"))
 
     if not (root / SELF).is_file():
         violations.append(f"expected the guard itself at {SELF}, not found")

@@ -5,6 +5,8 @@ Description=herdr-core terminal holder (hc)
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=%h/.local/bin/hc server start
+# Stopping this unit must never kill the hc core (it holds every terminal) if the core lives in its cgroup.
+KillMode=process
 
 [Install]
 WantedBy=default.target

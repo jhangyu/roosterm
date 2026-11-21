@@ -56,7 +56,7 @@ This section shows the three pieces and who owns what.
 browser / Flutter WebView ──HTTPS (your reverse proxy)──▶ roosterm (one Go binary) ──Unix socket, JSON-RPC──▶ herdr-core (hc)
 ```
 
-- herdr-core (`hc`, version 0.1.21) is the program that keeps your terminals running. It holds every terminal and the programs in them. roosterm does not install it.
+- herdr-core (`hc`, version 0.1.21) is the program that keeps your terminals running. It holds every terminal and the programs in them. The roosterm installer installs it if it is missing.
   <!-- evidence: docs/hc-bridge.md:1; deploy/README.md:3 -->
 - roosterm is one program on the same machine. It shows the login page and the terminals, and talks to `hc` over a local socket. It keeps no terminal state.
   <!-- evidence: docs/design.md:15; host/cmd/roosterm/serve.go:56-57 -->
@@ -68,37 +68,78 @@ browser / Flutter WebView ──HTTPS (your reverse proxy)──▶ roosterm (on
 This section lists what you need.
 
 - A host machine running macOS or Linux. Windows hosts are not supported.
-  <!-- evidence: docs/design.md:7; scripts/service.py:176-177; deploy/systemd/ -->
-- `hc` 0.1.21 (installed in the next section). roosterm stops with an error at start if it cannot reach the `hc` socket.
+  <!-- evidence: docs/design.md:7; deploy/install.py:166-167; deploy/systemd/ -->
+- Python 3.9 or newer, to run the installer (the stock `python3` on macOS is enough), and `curl` and `tar`, which the installer uses to fetch `hc`.
+  <!-- evidence: deploy/install.py:164-165,239-242; docs/logs/contract-server-package.md:9 -->
+- `hc` 0.1.21 (the installer sets it up). roosterm stops with an error at start if it cannot reach the `hc` socket.
   <!-- evidence: host/internal/hc/supervisor.go:26-32; docs/design.md:35 -->
-- To build roosterm: `git`, Go 1.26.11, Node.js with npm, and Python 3.
-  <!-- evidence: host/go.mod:3; scripts/build.py:39-45 -->
+- Only to build roosterm from source: `git`, Go 1.26.11, Node.js with npm, and Python 3.
+  <!-- evidence: host/go.mod:3; scripts/build.py:77-82,98 -->
 - A domain or address with HTTPS, served by a reverse proxy you run. Any proxy that supports WebSocket works.
   <!-- evidence: docs/api.md:16; host/internal/web/server.go:35 -->
 - Optional: an Android phone for the app.
-- There is no prebuilt server binary. GitHub Releases carries only the Android app.
-  <!-- evidence: scripts/ci.py:44-55 (PLATFORMS has only android) -->
+- A prebuilt server package for your host from [GitHub Releases](https://github.com/jhangyu/roosterm/releases) (see Install).
+  <!-- evidence: scripts/ci.py:94-105; .github/workflows/android.yml:34-45 -->
 
 ## Install
 
-This section puts `hc` and `roosterm` on the host.
+This section puts `hc` and `roosterm` on the host and starts them as a service.
 
-### Install hc
+### Install with the server package
 
-This step installs herdr-core 0.1.21 into `~/.local/bin`. Use herdr-core's own installer script (`distribution/install.sh` in the herdr-core repository). The installer checks the sha256 and, on macOS, the code signature.
+This step downloads one package and runs its interactive installer.
 
-```sh
-HC_VERSION=0.1.21 HC_INSTALL_DIR=$HOME/.local/bin sh install.sh
-```
-<!-- evidence: docs/logs/2026-11-19-spike-hc.md:35,37 (the installer checks sha256 and, on macOS, the code signature) -->
+1. Open [GitHub Releases](https://github.com/jhangyu/roosterm/releases) and download the package for your host:
 
-Check that it worked: `~/.local/bin/hc --version` prints `hc 0.1.21`.
+   | File | Host |
+   |---|---|
+   | `roosterm-server-darwin-arm64.tar.gz` | Mac with Apple silicon |
+   | `roosterm-server-darwin-amd64.tar.gz` | Intel Mac |
+   | `roosterm-server-linux-amd64.tar.gz` | Linux x86_64 |
+   | `roosterm-server-linux-arm64.tar.gz` | Linux ARM64 |
+   <!-- evidence: scripts/ci.py:94-105; docs/logs/contract-server-package.md:27-30 -->
+2. Unpack it and run the installer from your normal login shell (replace the file name with yours):
 
-### Build and install roosterm
+   ```sh
+   tar xzf roosterm-server-darwin-arm64.tar.gz
+   python3 roosterm-server-darwin-arm64/install.py
+   ```
+3. Answer the prompts. The installer:
+   - copies `roosterm` to `~/.local/bin` and checks that it runs on this machine (on macOS it also clears the quarantine flag that the download put on the file, since you chose to run this package);
+   - installs `hc` 0.1.21 with herdr's official installer when `hc` is missing or older, and keeps an installed `hc` that is 0.1.21 or newer;
+   - asks for your login shell, the listen address (default `127.0.0.1:8787`), a username and a password, and writes `~/.config/roosterm/config.toml`;
+   - installs and starts the service (a launchd job on macOS, systemd user units on Linux; on Linux it also offers `loginctl enable-linger` so roosterm starts at boot) and prints the address to open.
+   <!-- evidence: deploy/install.py:199-203,321-344; scripts/ci.py:94-105 -->
 
-This step builds roosterm and copies it next to `hc`.
+- Run `python3 install.py` again (from the unpacked folder) to upgrade or reconfigure. With an existing config it shows your listen address, shell and username, then asks `Keep listen address and shell? [Y/n]` and `Change username/password? [y/N]`. Your sessions are kept, and your running programs are not stopped.
+  <!-- evidence: deploy/install.py:256-277,194-212; docs/logs/contract-server-package.md:9 -->
+- Control the service from the same folder:
 
-1. Clone the repository and build:
+  ```sh
+  python3 install.py status      # service state and whether the port answers
+  python3 install.py restart     # also: start, stop, uninstall
+  ```
+
+  `uninstall` removes only the service files. `hc` keeps running, and your config and sessions stay.
+  <!-- evidence: deploy/install.py:387-444,471-480 -->
+- The installer refuses to run when `XDG_CONFIG_HOME` is set to anything other than `~/.config`, because the services read `~/.config/roosterm`. Unset it for the install.
+  <!-- evidence: deploy/install.py:188-192 -->
+- HTTPS is still your job: see [Put it behind HTTPS](#put-it-behind-https).
+
+### Manual install (advanced)
+
+This step does by hand what the installer does. It builds roosterm from source. The sections "Create your login", "Configuration" and "Start the server" below describe the same result in detail.
+
+1. Install `hc` 0.1.21 into `~/.local/bin` with herdr-core's official installer (`https://releases.herdr.dev/core/install.sh`). The installer checks the sha256 and, on macOS, the code signature.
+
+   ```sh
+   curl -fsSL https://releases.herdr.dev/core/install.sh -o install.sh
+   HC_VERSION=0.1.21 HC_INSTALL_DIR=$HOME/.local/bin sh install.sh
+   ```
+
+   Check that it worked: `~/.local/bin/hc --version` prints `hc 0.1.21`.
+   <!-- evidence: https://releases.herdr.dev/core/install.sh (HTTP 200); docs/logs/2026-11-19-spike-hc.md:35,37 -->
+2. Clone the repository and build:
 
    ```sh
    git clone https://github.com/jhangyu/roosterm.git
@@ -107,8 +148,8 @@ This step builds roosterm and copies it next to `hc`.
    ```
 
    The result is `build/roosterm`. The script runs `npm ci` and `npm run build` for the web client, then `go build -trimpath` with `CGO_ENABLED=0`. It prints `wrote build/roosterm`.
-   <!-- evidence: git remote -v; scripts/build.py:31,39-46 -->
-2. Copy the binary into `~/.local/bin`:
+   <!-- evidence: git remote -v; scripts/build.py:77-82,98-99 -->
+3. Copy the binary into `~/.local/bin`:
 
    ```sh
    mkdir -p ~/.local/bin
@@ -116,15 +157,17 @@ This step builds roosterm and copies it next to `hc`.
    ```
 
    The service files in "Start the server" expect both `hc` and `roosterm` in `~/.local/bin`.
-   <!-- evidence: scripts/service.py:27,92-94; deploy/systemd/roosterm.service:7; deploy/launchd/dev.roosterm.serve.plist:11 -->
+   <!-- evidence: deploy/systemd/roosterm.service:7; deploy/launchd/dev.roosterm.serve.plist:11 -->
 
 - To build on one machine for another, run `python3 scripts/build.py --target linux/arm64`. It writes `build/roosterm-linux-arm64`. `--target` takes `GOOS/GOARCH`. Copy that file to the host as `~/.local/bin/roosterm`.
-  <!-- evidence: scripts/build.py:4-5,29,33-38 -->
+  <!-- evidence: scripts/build.py:4-5,36-41,94-99 -->
+- To build the server packages yourself, run `python3 scripts/build.py --package darwin/arm64 linux/amd64`. It writes `build/roosterm-server-<os>-<arch>.tar.gz` for each target.
+  <!-- evidence: scripts/build.py:6,70-72; docs/logs/contract-server-package.md:8 -->
 - To update later: rebuild, copy again, and restart the service.
 
 ## Create your login
 
-This section creates your login.
+This section creates your login by hand. The installer does this for you.
 
 ```sh
 ~/.local/bin/roosterm passwd
@@ -178,10 +221,10 @@ password_hash = "$argon2id$v=19$m=65536,t=3,p=4$<salt b64>$<key b64>"
 
 ## Start the server
 
-This section starts roosterm and keeps it running.
+This section starts roosterm and keeps it running. The installer already sets up the service, so use it only for the manual install or to try roosterm in the foreground.
 
 **Never run `hc server stop` on a machine in use. It ends every program in every tab.** None of the commands below stops hc.
-<!-- evidence: deploy/README.md:5; scripts/service.py:11 -->
+<!-- evidence: deploy/README.md:5; deploy/install.py -->
 
 ### Try it in the foreground
 
@@ -210,25 +253,25 @@ This step starts roosterm in your terminal, to check the setup.
 This step installs a launchd job that starts hc and roosterm for you.
 
 ```sh
-python3 scripts/service.py install    # install and load the launchd job
-python3 scripts/service.py status     # loaded, pid, last exit code, whether the port answers
-python3 scripts/service.py restart    # also: start, stop, uninstall
+python3 deploy/install.py --binary build/roosterm    # install and load the launchd job
+python3 deploy/install.py status                      # loaded, pid, last exit code, whether the port answers
+python3 deploy/install.py restart                     # also: start, stop, uninstall
 ```
 
-- Run these from the roosterm folder. `install` first checks that `~/.local/bin/hc` and `~/.local/bin/roosterm` exist.
-  <!-- evidence: scripts/service.py:21-27,91-101 -->
+- Run these from the roosterm folder. The first command is the same installer the package ships, pointed at your own build. It also asks for the login and settings when no config exists.
+  <!-- evidence: deploy/install.py:478,387-473 -->
 - The job starts `hc server start` and then `roosterm serve`, at login and after a crash (not after a clean exit).
   <!-- evidence: deploy/launchd/dev.roosterm.serve.plist:9-19; deploy/README.md:15 -->
 - The job file goes to `~/Library/LaunchAgents`. The log is `~/Library/Logs/roosterm.log`.
-  <!-- evidence: service.py:26 -->
-- The job uses `/bin/zsh -lc`. If your login shell is not zsh, edit `/bin/zsh` in `deploy/launchd/dev.roosterm.serve.plist` and run `install` again.
-  <!-- evidence: plist:9-10; deploy/README.md:15 -->
+  <!-- evidence: deploy/install.py:45-50,280-290 -->
+- The job runs your chosen login shell with `-lc`. The installer writes that shell into the job file.
+  <!-- evidence: deploy/launchd/dev.roosterm.serve.plist:9-10; deploy/install.py:285-288 -->
 - `stop` keeps hc running. The job loads again at next login or on `start`.
-  <!-- evidence: service.py:129-135 -->
+  <!-- evidence: deploy/install.py:403-414 -->
 
 ### Run as a service on Linux
 
-This step installs two systemd user units. `herdr-core.service` runs `hc server start`. `roosterm.service` needs it and restarts roosterm on failure.
+This step installs two systemd user units. `herdr-core.service` runs `hc server start`. `roosterm.service` needs it and restarts roosterm on failure. The installer does the same; these are the manual commands.
 
 ```sh
 mkdir -p ~/.config/systemd/user
@@ -239,8 +282,8 @@ loginctl enable-linger "$USER"   # start at boot without a login session
 ```
 
 - The log is in `journalctl --user -u roosterm.service`.
-- To stop roosterm and keep hc running: `systemctl --user stop roosterm.service`. Stopping `herdr-core.service` does not stop hc (the unit has no `ExecStop`).
-<!-- evidence: deploy/systemd/herdr-core.service:5-7; deploy/systemd/roosterm.service:2-8; deploy/README.md:21-29 -->
+- To stop roosterm and keep hc running: `systemctl --user stop roosterm.service`. Stopping `herdr-core.service` does not stop hc (the unit has `KillMode=process`, so stopping it leaves hc running).
+<!-- evidence: deploy/systemd/herdr-core.service:9-10; deploy/systemd/roosterm.service:2-8; deploy/README.md:21-29 -->
 
 ## Put it behind HTTPS
 
@@ -268,14 +311,16 @@ This section puts the prebuilt app on a phone and connects it.
    - `us.jhangy.roosterm-arm64-v8a.apk`: most current phones.
    - `us.jhangy.roosterm-armeabi-v7a.apk`: older 32-bit phones.
    - `us.jhangy.roosterm-x86_64.apk`: emulators and x86 devices.
-   <!-- evidence: gh release view app-v0.0.0 --repo jhangyu/roosterm (assets); scripts/ci.py:49,54; app/android/app/build.gradle.kts:18 -->
-2. Open the file on the phone. When Android asks, allow installing from this source (sideloading: installing an APK file without the Play Store). The APK is signed with a debug key because it is not published on the Play Store.
-   <!-- evidence: app/android/app/build.gradle.kts:31-33 -->
+   <!-- evidence: gh release view app-v0.0.0 --repo jhangyu/roosterm (assets); scripts/ci.py:83-93; app/android/app/build.gradle.kts:18 -->
+2. Open the file on the phone. When Android asks, allow installing from this source (sideloading: installing an APK file without the Play Store). Releases are signed with one fixed key, so a newer APK installs over the old one and keeps your saved hosts.
+   <!-- evidence: app/android/app/build.gradle.kts:30-57; docs/logs/contract-server-package.md:10 -->
 3. In the app, add a host: a name and an `https://` address. `http://` is refused because the login cookie is `Secure`. Open the host to sign in.
    <!-- evidence: app/lib/hosts.dart:11-20 -->
 
 - The app loads only pages on that host's address. Links to other sites are blocked, and a notice shows the address. The app is Android only; there is no iOS app.
   <!-- evidence: app/lib/hosts.dart:24-32; app/lib/host_page.dart:29-34; app/README.md:3 -->
+- Phones that installed release 0.0.0 must uninstall it once, because that APK was signed with a throwaway key. Saved hosts in the app are lost. Later releases update in place.
+  <!-- evidence: docs/logs/contract-server-package.md:10; gh release view app-v0.0.0 -->
 - To build the app yourself, see [Build the Android app](#build-the-android-app).
 
 ## Security notes
@@ -311,22 +356,43 @@ flutter build apk
 ```
 
 - A plain `flutter build apk` builds arm64 only. `python3 scripts/ci.py build android` builds all three ABIs (one APK each) into `app/build/dist/`, named like the release files.
-  <!-- evidence: app/android/app/build.gradle.kts:23-27; app/android/build.gradle.kts:3-10; scripts/ci.py:6,30,45-55 -->
-- Release builds use the debug key on purpose, because the app is sideloaded.
-  <!-- evidence: build.gradle.kts:31-33 -->
+  <!-- evidence: app/android/app/build.gradle.kts:23-27; app/android/build.gradle.kts:3-10; scripts/ci.py:7,83-105 -->
+- A local release build is debug-signed unless `ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` are set. A debug-signed APK cannot update a release install, and the other way round. A partial set stops the build with an error.
+  <!-- evidence: app/android/app/build.gradle.kts:30-57 -->
 
 ## Releases and CI
 
 This section explains how a release is made.
 
 1. `python3 scripts/ci.py bump patch` (or `minor`, `major`, or an explicit `X.Y.Z+N` such as `bump 0.0.0+1`) updates `app/pubspec.yaml`, commits it, and creates the tag `app-vX.Y.Z`. It does not push. `--dry-run` shows the change only.
-   <!-- evidence: scripts/ci.py:8-9,120-154 -->
+   <!-- evidence: scripts/ci.py:8-9,191-216 -->
 2. It refuses to run when tracked files have uncommitted changes (untracked files are ignored) or when the tag already exists.
-   <!-- evidence: ci.py:141-145 -->
-3. `git push origin HEAD app-vX.Y.Z` triggers `.github/workflows/android.yml`. It runs the test guard (`ci.py guard`; CI never runs tests), builds per-ABI release APKs (`ci.py build android`), and publishes a GitHub Release with the three APKs. It uses the built-in `GITHUB_TOKEN`, so no secrets are needed.
-   <!-- evidence: .github/workflows/android.yml:1-29; ci.py:1-11,154,157-175; scripts/ci_guard.py:1-3 -->
+   <!-- evidence: ci.py:202-206 -->
+3. `git push origin HEAD app-vX.Y.Z` triggers `.github/workflows/android.yml`. It runs the test guard (`ci.py guard`; CI never runs tests), builds per-ABI release APKs (`ci.py build android`) and the four server packages (`ci.py build server`), and publishes one GitHub Release, titled `roosterm X.Y.Z`, with the three APKs and four packages. The build needs the four signing secrets described below and fails when they are missing.
+   <!-- evidence: .github/workflows/android.yml:33-45; scripts/ci.py:82-105,232; scripts/ci_guard.py:2-6 -->
 4. Locally, `git config core.hooksPath .githooks` makes each push run `python3 scripts/ci.py prepush` (guard plus the same build, output in `app/build/dist/`).
-   <!-- evidence: .githooks/pre-push; ci.py:7,30 -->
+   <!-- evidence: .githooks/pre-push; ci.py:7,243,256 -->
+
+### Maintainers: the fixed signing key
+
+This step creates the one key that signs every release APK. Do it once, on your own machine.
+
+```sh
+mkdir -p ~/.config/roosterm
+keytool -genkeypair -v -storetype PKCS12 -keystore ~/.config/roosterm/release-key.jks \
+  -alias roosterm -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=roosterm"
+base64 -i ~/.config/roosterm/release-key.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_PASSWORD
+printf roosterm | gh secret set ANDROID_KEY_ALIAS
+```
+
+- The keystore lives at `~/.config/roosterm/release-key.jks`. Keep the file and its password readable by you only. For PKCS12, the key password equals the store password, so give both secrets the same value.
+  <!-- evidence: docs/logs/contract-server-package.md:29; keytool -help -->
+- The four GitHub Actions secrets are `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. CI turns the base64 secret into a temporary keystore file and passes it to Gradle as `ANDROID_KEYSTORE_FILE`.
+  <!-- evidence: docs/logs/contract-server-package.md:10; scripts/ci.py:48-78; app/android/app/build.gradle.kts:30-57 -->
+- Back up the keystore file and its password (a password manager plus one offline copy). **If you lose the key, no phone can update in place: every user must uninstall and reinstall the app.** Never commit the key; `app/android/.gitignore` already ignores `*.jks`.
+  <!-- evidence: app/android/.gitignore:12-13 -->
 
 ## Development and tests
 
@@ -355,9 +421,9 @@ host/cmd/roosterm/   main, serve, passwd
 host/internal/       api, apierr, atomicfile, auth, bridge, config, hc, swarm, web
 web/src/             api, components, lib, screens, terminal, workspace, styles
 app/lib/             Flutter host list and WebView pages
-deploy/              systemd units, launchd plist, deploy/README.md
+deploy/              install.py, systemd units, launchd plist, deploy/README.md
 docs/                design.md, api.md, hc-bridge.md, logs/
-scripts/             build.py, service.py, test.py, ci.py, ci_guard.py
+scripts/             build.py, test.py, ci.py, ci_guard.py
 .github/workflows/   android.yml
 .githooks/           pre-push
 ```
