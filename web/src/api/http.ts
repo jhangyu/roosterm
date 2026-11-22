@@ -1,4 +1,4 @@
-import { ApiError, HTTP_STATUS, parseTabEnd, type CreateRequest, type Tab } from "./types"
+import { ApiError, HTTP_STATUS, parseTabEnd, type ClaudePane, type CreateRequest, type Tab } from "./types"
 
 const FOREIGN_BODY_MAX_CHARS = 200
 const HTML_TITLE = /<title[^>]*>([\s\S]*?)<\/title>/i
@@ -125,6 +125,23 @@ export async function listSwarms(): Promise<string[]> {
     throw new ApiError(op, res.status, null, `expected string[], got ${JSON.stringify(v)}`)
   }
   return v
+}
+
+// Claude Code panes on non-swarm tmux sockets; errors = sockets the host could not list (reported, not dropped).
+export type ClaudePanes = { panes: ClaudePane[]; errors: { socket: string; message: string }[] }
+
+export async function listClaudePanes(): Promise<ClaudePanes> {
+  const op = "list claude panes"
+  const res = await call(op, "GET", "/api/claude-panes")
+  const v = await json(op, res)
+  const o = typeof v === "object" && v !== null ? (v as Record<string, unknown>) : {}
+  const paneOk = (p: Record<string, unknown>) =>
+    typeof p?.socket === "string" && typeof p.session === "string" && typeof p.window === "number" && typeof p.id === "string" && typeof p.cwd === "string"
+  const errOk = (e: Record<string, unknown>) => typeof e?.socket === "string" && typeof e.message === "string"
+  if (!Array.isArray(o.panes) || !o.panes.every(paneOk) || !Array.isArray(o.errors) || !o.errors.every(errOk)) {
+    throw new ApiError(op, res.status, null, `expected {panes: ClaudePane[], errors: {socket, message}[]}, got ${JSON.stringify(v)}`)
+  }
+  return o as ClaudePanes
 }
 
 // Subfolders of a folder under the host home (GET /api/dirs?path=<rel>, "" = home).

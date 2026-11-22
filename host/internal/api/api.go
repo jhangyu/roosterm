@@ -42,6 +42,7 @@ func New(o Options) http.Handler {
 	mux.Handle("PATCH /api/tabs/{id}", apierr.HandlerFunc(s.updateTab))
 	mux.Handle("DELETE /api/tabs/{id}", apierr.HandlerFunc(s.closeTab))
 	mux.Handle("GET /api/swarms", apierr.HandlerFunc(s.listSwarms))
+	mux.Handle("GET /api/claude-panes", apierr.HandlerFunc(s.listClaudePanes))
 	mux.Handle("GET /api/dirs", apierr.HandlerFunc(s.listDirs))
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, apierr.NotFound("api", "", fmt.Sprintf("no endpoint %s %s", r.Method, r.URL.Path)))

@@ -27,9 +27,14 @@ func Dir(getenv func(string) string, uid int) string {
 }
 
 // List returns the names of live Unix sockets in dir that start with Prefix, sorted.
+func List(ctx context.Context, dir string) ([]string, error) {
+	return liveSockets(ctx, dir, func(name string) bool { return strings.HasPrefix(name, Prefix) })
+}
+
+// liveSockets returns the names of live Unix sockets in dir that satisfy keep, sorted.
 // A socket whose connect is refused belongs to a dead tmux server: its file is removed and not listed.
 // A missing dir means no tmux server has run: empty list, no error.
-func List(ctx context.Context, dir string) ([]string, error) {
+func liveSockets(ctx context.Context, dir string, keep func(name string) bool) ([]string, error) {
 	entries, err := os.ReadDir(dir) // sorted by name
 	if errors.Is(err, fs.ErrNotExist) {
 		return []string{}, nil
@@ -39,7 +44,7 @@ func List(ctx context.Context, dir string) ([]string, error) {
 	}
 	names := []string{}
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), Prefix) && e.Type()&fs.ModeSocket != 0 {
+		if keep(e.Name()) && e.Type()&fs.ModeSocket != 0 {
 			live, err := probe(ctx, filepath.Join(dir, e.Name()))
 			if err != nil {
 				return nil, err
@@ -112,11 +117,19 @@ func AttachArgv(ctx context.Context, dir, name string) ([]string, error) {
 
 // attachArgv builds the attach command for socket path sock from `tmux list-panes` output.
 func attachArgv(sock, listPanes string) []string {
-	argv := []string{"tmux", "-S", sock, "a"}
+	argv := []string{"tmux", "-S", sock}
 	if target, ok := memberTarget(listPanes); ok {
-		argv = append(argv, "-t", target)
+		return append(append(argv, mouseOn(target)...), "a", "-t", target)
 	}
-	return argv
+	return append(argv, "a")
+}
+
+// mouseOn turns on mouse mode for target's session, followed by a command separator.
+// Claude Code's transcript lives in tmux's scrollback, which only tmux can scroll: with mouse on, the wheel
+// (and touch drags, sent as wheel events) enters copy mode and scrolls instead of reaching Claude as arrow keys.
+// It is a session option, so it stays on for other clients of that session too.
+func mouseOn(target string) []string {
+	return []string{"set-option", "-t", target, "mouse", "on", ";"}
 }
 
 // IsName reports whether name is a bare swarm socket name (Prefix, no path separators).

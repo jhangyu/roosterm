@@ -16,7 +16,9 @@ export function parseTabEnd(v: unknown): TabEnd | undefined {
 }
 
 // cwd: start folder relative to the host home ("" = home).
-export type CreateRequest = { swarm: string } | { command?: string[]; label?: string; cwd?: string }
+// pane: a Claude Code pane on a non-swarm tmux socket (GET /api/claude-panes).
+export type ClaudePane = { socket: string; session: string; window: number; id: string; cwd: string }
+export type CreateRequest = { swarm: string } | { pane: { socket: string; id: string }; label: string } | { command?: string[]; label?: string; cwd?: string }
 
 // ApiError.status values the client reacts to (0 = the request never reached the host).
 export const HTTP_STATUS = {

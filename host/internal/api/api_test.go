@@ -125,6 +125,10 @@ func TestCreateTabSwarmBadRequest(t *testing.T) {
 		`{"swarm":"claude-swarm-1/../y"}`,
 		`{"swarm":"claude-swarm-1","command":["sh"]}`,
 		`{"swarm":"claude-swarm-1","cwd":"p"}`,
+		`{"pane":{"socket":"claude-relay","id":"3"}}`,
+		`{"pane":{"socket":"a/b","id":"%3"}}`,
+		`{"pane":{"socket":"claude-swarm-1","id":"%3"}}`,
+		`{"pane":{"socket":"claude-relay","id":"%3"},"cwd":"p"}`,
 	} {
 		if rec := e.do("POST", "/api/tabs", body); rec.Code != http.StatusBadRequest {
 			t.Fatalf("%s: expected 400, got %d %s", body, rec.Code, rec.Body)

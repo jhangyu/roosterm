@@ -1,4 +1,5 @@
-import type { CreateRequest, Tab } from "@/api/types"
+import type { ClaudePane, CreateRequest, Tab } from "@/api/types"
+import { baseName } from "./folders"
 
 // tabs: the tab strip; hidden: sessions hidden on any client (listed in the New-session dialog for re-showing).
 export type Workspace = { tabs: Tab[]; hidden: Tab[]; activeId: string | null }
@@ -29,12 +30,29 @@ export const isSwarm = (tab: Tab) => tab.label.startsWith("claude-swarm-")
 // Swarm tab request (docs/api.md: POST /api/tabs); the host labels it with the socket name.
 export const swarmTab = (name: string): CreateRequest => ({ swarm: name })
 
-// Same kind, folder and label as the given tab: swarm => re-attach to its socket; Claude Code => `claude` in the same
+// Existing-Claude tab request: the label "<folder> <socket>:<pane id>" is how restartRequest recognises it again
+// (ponytail: a renamed tab is treated as a shell, like swarm tabs).
+export const existingTab = (pane: ClaudePane): CreateRequest => ({
+  pane: { socket: pane.socket, id: pane.id },
+  label: `${baseName(pane.cwd)} ${pane.socket}:${pane.id}`,
+})
+const EXISTING_LABEL = /^.* (\S+):(%\d+)$/
+
+// Same kind, folder and label as the given tab: swarm => re-attach to its socket; existing Claude => re-attach to its pane; Claude Code => `claude` in the same
 // folder; shell => server default shell in the same folder. The caller restores `renamed` (create cannot set it).
+const TMUX_PROGRAM = "tmux"
+function existingRestart(tab: Tab): CreateRequest {
+  const m = EXISTING_LABEL.exec(tab.label)
+  if (m === null) throw new Error(`existing Claude tab: expected label "<folder> <socket>:%<n>", got ${JSON.stringify(tab.label)}`)
+  return { pane: { socket: m[1], id: m[2] }, label: tab.label }
+}
+
 export const restartRequest = (tab: Tab): CreateRequest =>
   isSwarm(tab)
     ? swarmTab(tab.label)
-    : tab.program === CLAUDE_PROGRAM
+    : tab.program === TMUX_PROGRAM && EXISTING_LABEL.test(tab.label)
+      ? existingRestart(tab)
+      : tab.program === CLAUDE_PROGRAM
       ? { command: CLAUDE_COMMAND, cwd: tab.cwd, label: tab.label }
       : { cwd: tab.cwd, label: tab.label }
 

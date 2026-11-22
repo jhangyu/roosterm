@@ -15,7 +15,7 @@ func TestAttachArgv(t *testing.T) {
 		panes string
 		want  []string
 	}{
-		{"s:0 zsh\ns:1 claude.exe\ns:15 zsh\ns:15 claude.exe\ns:15 claude.exe\n", []string{"tmux", "-S", sock, "a", "-t", "s:15"}},
+		{"s:0 zsh\ns:1 claude.exe\ns:15 zsh\ns:15 claude.exe\ns:15 claude.exe\n", []string{"tmux", "-S", sock, "set-option", "-t", "s:15", "mouse", "on", ";", "a", "-t", "s:15"}},
 		{"s:0 zsh\n", []string{"tmux", "-S", sock, "a"}},
 	} {
 		if got := attachArgv(sock, tc.panes); !slices.Equal(got, tc.want) {
@@ -106,5 +106,40 @@ func TestDir(t *testing.T) {
 	env["TMUX_TMPDIR"] = "/var/tmux"
 	if got := Dir(getenv, 501); got != "/var/tmux/tmux-501" {
 		t.Fatalf("Dir with TMUX_TMPDIR: got %s", got)
+	}
+}
+
+func TestParsePanes(t *testing.T) {
+	t.Parallel()
+	got, err := parsePanes("claude-relay", "0 %1 zsh s:/a\n2 %7 claude.exe s:/Users/me/my proj:x\n")
+	want := []Pane{{Socket: "claude-relay", Session: "s", Window: 2, ID: "%7", Cwd: "/Users/me/my proj:x"}}
+	if err != nil || !slices.Equal(got, want) {
+		t.Fatalf("parsePanes: expected %v, got %v, %v", want, got, err)
+	}
+	if _, err := parsePanes("x", "s_0_%1_claude.exe_/a\n"); err == nil {
+		t.Fatal("parsePanes malformed line: expected error")
+	}
+}
+
+func TestSocketNameAndPaneID(t *testing.T) {
+	t.Parallel()
+	for name, want := range map[string]bool{"claude-relay": true, "default": true, "": false, "..": false, "a/b": false, "claude-swarm-1": false} {
+		if got := IsSocketName(name); got != want {
+			t.Errorf("IsSocketName(%q): expected %v, got %v", name, want, got)
+		}
+	}
+	for id, want := range map[string]bool{"%0": true, "%12": true, "%": false, "12": false, "%1;x": false, "%a": false} {
+		if got := IsPaneID(id); got != want {
+			t.Errorf("IsPaneID(%q): expected %v, got %v", id, want, got)
+		}
+	}
+}
+
+func TestPaneAttachArgv(t *testing.T) {
+	t.Parallel()
+	got := PaneAttachArgv("/d", "claude-relay", "%3")
+	want := []string{"tmux", "-S", "/d/claude-relay", "set-option", "-t", "%3", "mouse", "on", ";", "select-window", "-t", "%3", ";", "select-pane", "-t", "%3", ";", "attach-session", "-t", "%3"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("PaneAttachArgv: expected %v, got %v", want, got)
 	}
 }

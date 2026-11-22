@@ -46,11 +46,12 @@ hc-originated `message` = `<hc method>[ <tab>]: <hc message>`.
 | `POST /login` | none | `{"username":string,"password":string}` (both non-empty) | `204`, `Set-Cookie` |
 | `POST /logout` | cookie | none | `204`, clearing `Set-Cookie`; session removed from file |
 | `GET /api/tabs` | cookie | none | `200` `Tab[]`, ordered by creation time ascending |
-| `POST /api/tabs` | cookie | `{"command"?: string[], "label"?: string, "cwd"?: string, "swarm"?: string}` (`cwd` relative to home; `swarm` excludes `command` and `cwd`) | `201` `Tab` |
+| `POST /api/tabs` | cookie | `{"command"?: string[], "label"?: string, "cwd"?: string, "swarm"?: string, "pane"?: {"socket": string, "id": string}}` (`cwd` relative to home; `swarm` excludes `command` and `cwd`; `pane` excludes `command`, `cwd` and `swarm`) | `201` `Tab` |
 | `PATCH /api/tabs/{id}` | cookie | `{"label"?: string, "hidden"?: boolean}`, at least one (op `tab.update`; `label` sets `renamed`) | `200` `Tab` |
 | `DELETE /api/tabs/{id}` | cookie | none | `204` |
 | `GET /api/dirs?path=<rel>` | cookie | none | `200` `{"path": string, "entries": [{"name": string, "hidden": boolean}]}` |
 | `GET /api/swarms` | cookie | none | `200` `string[]` (live tmux socket names starting with `claude-swarm-`, sorted) |
+| `GET /api/claude-panes` | cookie | none | `200` `{"panes": {"socket","session","window":int,"id","cwd"}[], "errors": {"socket","message"}[]}` (Claude Code panes on live tmux sockets not starting with `claude-swarm-`) |
 | `GET /ws/tabs/{id}?cols=N&rows=N` | cookie, checked **before** upgrade | WebSocket upgrade | see below |
 | `GET /` and any other `GET` path | none | — | embedded static files; unknown paths serve `index.html` (SPA) |
 
@@ -73,7 +74,8 @@ Session check = `GET /api/tabs` (401 ⇒ show login). There is no whoami endpoin
 - `command` omitted ⇒ argv `[config.shell, "-l"]`. Present ⇒ non-empty array of non-empty strings, used verbatim as argv.
 - `cwd` omitted or `""` ⇒ home. Otherwise validated exactly like `GET /api/dirs` `path` (relative, no `..`, resolves inside home, must be a directory). The resolved directory is the hc cwd.
 - `swarm` = a live socket name from `GET /api/swarms`. It excludes `command` and `cwd` (400 `swarm: expected no "command" or "cwd" together with "swarm", got both`). A name not starting with `claude-swarm-` or containing `/` gives 400 (`swarm: expected a socket name starting with "claude-swarm-" and without "/", got "<name>"`). The host attaches with `tmux -S <socket dir>/<name> a [-t <window with most claude panes>]`; a well-formed name with no live socket gives 500.
-- `label` omitted ⇒ the swarm name for a swarm tab, else `"~"` when the resolved cwd is home, else the base name of the resolved cwd. Label: 1–64 characters, no control characters (400 otherwise).
+- `pane` = `socket` and `id` from `GET /api/claude-panes`. It excludes `command`, `cwd` and `swarm` (400). A `socket` that is empty, contains `/`, or starts with `claude-swarm-`, or an `id` not matching `%<digits>`, gives 400. The host runs `tmux -S <socket dir>/<socket> select-window -t <id> \; select-pane -t <id> \; attach-session -t <id>`, so the tab shows that pane. A well-formed pane that no longer exists ends the tab with tmux's error. `GET /api/claude-panes` scans every live socket in the dir (dead socket files are removed); a socket whose `tmux list-panes` fails is listed in `errors` and does not hide the other sockets' panes. Swarm sockets are excluded because `GET /api/swarms` covers them.
+- `label` omitted ⇒ the swarm name for a swarm tab, `<socket>:<id>` for a pane tab, else `"~"` when the resolved cwd is home, else the base name of the resolved cwd. Label: 1–64 characters, no control characters (400 otherwise).
 - hc call: `terminal.run {argv, cwd, size: {cols:80, rows:24}, labels: {"roosterm":"tab","roosterm.name":label}, no_parent: true}`. The first attach resizes it.
 
 ### `PATCH /api/tabs/{id}`

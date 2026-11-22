@@ -81,6 +81,12 @@ type createRequest struct {
 	Label   *string  `json:"label"`
 	Cwd     string   `json:"cwd"`   // relative to home
 	Swarm   *string  `json:"swarm"` // claude-swarm-* socket name; excludes command and cwd
+	Pane    *paneRef `json:"pane"`  // existing Claude Code tmux pane; excludes command, cwd and swarm
+}
+
+type paneRef struct {
+	Socket string `json:"socket"`
+	ID     string `json:"id"`
 }
 
 func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error {
@@ -90,7 +96,15 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error
 		return e
 	}
 	argv := []string{s.o.Shell, "-l"}
-	if req.Swarm != nil {
+	if req.Pane != nil {
+		if req.Command != nil || req.Cwd != "" || req.Swarm != nil {
+			return apierr.BadRequest(op, "", `pane: expected no "command", "cwd" or "swarm" together with "pane", got more than one`)
+		}
+		if !swarm.IsSocketName(req.Pane.Socket) || !swarm.IsPaneID(req.Pane.ID) {
+			return apierr.BadRequest(op, "", fmt.Sprintf(`pane: expected a non-swarm socket name without "/" and a pane id like "%%3", got socket %q id %q`, req.Pane.Socket, req.Pane.ID))
+		}
+		argv = swarm.PaneAttachArgv(s.o.SwarmDir, req.Pane.Socket, req.Pane.ID)
+	} else if req.Swarm != nil {
 		if req.Command != nil || req.Cwd != "" {
 			return apierr.BadRequest(op, "", `swarm: expected no "command" or "cwd" together with "swarm", got both`)
 		}
@@ -122,6 +136,9 @@ func (s *server) createTab(w http.ResponseWriter, r *http.Request) *apierr.Error
 	}
 	if req.Swarm != nil {
 		label = *req.Swarm
+	}
+	if req.Pane != nil {
+		label = req.Pane.Socket + ":" + req.Pane.ID
 	}
 	if req.Label != nil {
 		label = *req.Label

@@ -1,8 +1,8 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react"
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
-import { listSwarms } from "@/api/http"
-import { ApiError, HTTP_STATUS, type CreateRequest, type Tab } from "@/api/types"
-import { BotIcon, CheckmarkIcon, DismissIcon, EyeIcon, PeopleTeamIcon, WindowConsoleIcon } from "@/components/icons"
+import { listClaudePanes, listSwarms, type ClaudePanes } from "@/api/http"
+import { ApiError, HTTP_STATUS, type ClaudePane, type CreateRequest, type Tab } from "@/api/types"
+import { BotIcon, CheckmarkIcon, DismissIcon, EyeIcon, PeopleTeamIcon, PlugConnectedIcon, WindowConsoleIcon } from "@/components/icons"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { BTN, BTN_PRIMARY, ICON_BTN, KBD } from "@/components/classes"
 import { FolderPicker, RecentFolders, StartsIn } from "./FolderPicker"
 import { baseName } from "./folders"
-import { CLAUDE_COMMAND, swarmTab } from "./tabs"
+import { CLAUDE_COMMAND, existingTab, swarmTab } from "./tabs"
 import { useFolderBrowser } from "./useFolderBrowser"
 
 type Props = {
@@ -22,14 +22,18 @@ type Props = {
   onUnauthorized: () => void
 }
 
-type Kind = "shell" | "claude" | "swarm"
+type Kind = "shell" | "claude" | "swarm" | "existing"
 type Swarms = { kind: "loading" } | { kind: "ready"; names: string[] } | { kind: "error"; message: string }
 
+type Existing = { kind: "loading" } | ({ kind: "ready" } & ClaudePanes) | { kind: "error"; message: string }
+
 const KINDS: { value: Kind; icon: ReactNode; title: string; hint: string }[] = [
-  { value: "shell", icon: <WindowConsoleIcon />, title: "Shell", hint: "Login shell in the folder below" },
   { value: "claude", icon: <BotIcon />, title: "Claude Code", hint: "Runs claude in the folder below" },
+  { value: "existing", icon: <PlugConnectedIcon />, title: "Existing Claude", hint: "Attach to Claude Code already running in tmux" },
   { value: "swarm", icon: <PeopleTeamIcon />, title: "Swarm", hint: "Attach to a running swarm socket" },
+  { value: "shell", icon: <WindowConsoleIcon />, title: "Shell", hint: "Login shell in the folder below" },
 ]
+const paneKey = (p: ClaudePane) => `${p.socket}:${p.id}`
 const isKind = (v: string): v is Kind => KINDS.some((k) => k.value === v)
 
 function Choice(props: { value: Kind; icon: ReactNode; title: string; hint: string }) {
@@ -54,17 +58,33 @@ function Choice(props: { value: Kind; icon: ReactNode; title: string; hint: stri
 
 // Mockup 4b: desktop dialog / phone bottom sheet; Shell and Claude Code start in the picker's folder, Swarm attaches to a socket.
 export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow, onUnauthorized }: Props) {
-  const [kind, setKind] = useState<Kind>("shell")
+  const [kind, setKind] = useState<Kind>("claude")
   const [swarms, setSwarms] = useState<Swarms>({ kind: "loading" })
   const [picked, setPicked] = useState<string | null>(null)
+  const [existing, setExisting] = useState<Existing>({ kind: "loading" })
+  const [pickedPane, setPickedPane] = useState<string | null>(null)
   const folders = useFolderBrowser(open, onUnauthorized)
 
   useEffect(() => {
     if (!open) return
     let current = true
-    setKind("shell")
+    setKind("claude")
     setSwarms({ kind: "loading" })
     setPicked(null)
+    setExisting({ kind: "loading" })
+    setPickedPane(null)
+    listClaudePanes().then(
+      (found) => {
+        if (!current) return
+        setExisting({ kind: "ready", ...found })
+        setPickedPane(found.panes[0] ? paneKey(found.panes[0]) : null)
+      },
+      (e: unknown) => {
+        if (!(e instanceof ApiError)) throw e
+        if (e.status === HTTP_STATUS.unauthorized) onUnauthorized()
+        else if (current) setExisting({ kind: "error", message: e.message })
+      },
+    )
     listSwarms().then(
       (names) => {
         if (!current) return
@@ -82,9 +102,15 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow,
     }
   }, [open, onUnauthorized])
 
-  const canOpen = kind === "swarm" ? picked !== null : folders.listing.kind !== "gone"
+  const pane = existing.kind === "ready" ? existing.panes.find((p) => paneKey(p) === pickedPane) : undefined
+  const listsSession = kind === "swarm" || kind === "existing"
+  const canOpen = kind === "swarm" ? picked !== null : kind === "existing" ? pane !== undefined : folders.listing.kind !== "gone"
   const submit = () => {
     if (!canOpen) return
+    if (kind === "existing") {
+      if (pane !== undefined) onCreate(existingTab(pane))
+      return
+    }
     if (kind === "swarm") {
       if (picked !== null) onCreate(swarmTab(picked))
       return
@@ -102,9 +128,10 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow,
   }
 
   const folder = baseName(folders.path)
-  const primary = kind === "swarm" ? "Open swarm" : kind === "claude" ? `Open Claude Code in ${folder}` : `Open shell in ${folder}`
-  const listNote =
-    swarms.kind === "ready" ? `${swarms.names.length} found` : swarms.kind === "loading" ? "Loading…" : "Failed"
+  const primary = kind === "swarm" ? "Open swarm" : kind === "existing" ? "Open existing Claude" : kind === "claude" ? `Open Claude Code in ${folder}` : `Open shell in ${folder}`
+  const noteOf = (l: Swarms | Existing, count: number) => (l.kind === "ready" ? `${count} found` : l.kind === "loading" ? "Loading…" : "Failed")
+  const listNote = noteOf(swarms, swarms.kind === "ready" ? swarms.names.length : 0)
+  const existingNote = noteOf(existing, existing.kind === "ready" ? existing.panes.length : 0)
   const setKindFrom = (v: string) => {
     if (isKind(v)) setKind(v)
   }
@@ -114,7 +141,7 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow,
       {/* Desktop: 560 px dialog, the body scrolls inside 100dvh - 32. Phone (< md): full-height bottom sheet 48 px below the top. */}
       <DialogContent
         onKeyDown={onKeyDown}
-        className="flex flex-col gap-0 bg-popover text-body shadow-64 ring-0 sm:max-w-none max-md:top-12 max-md:bottom-0 max-md:left-0 max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-t-xl max-md:rounded-b-none max-md:p-0 md:max-h-[calc(100dvh-2rem)] md:w-[560px] md:max-w-[calc(100%-2rem)] md:rounded-xl md:p-7 md:pb-6"
+        className="flex flex-col gap-0 bg-popover text-body shadow-64 ring-0 sm:max-w-none max-md:top-12 max-md:bottom-0 max-md:left-0 max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-t-xl max-md:rounded-b-none max-md:p-0 md:max-h-[calc(100dvh-2rem)] md:w-[760px] md:max-w-[calc(100%-2rem)] md:rounded-xl md:p-7 md:pb-6"
       >
         <div className="mx-auto mt-2 mb-1 h-1 w-8 shrink-0 rounded-full bg-grey-82 md:hidden" aria-hidden="true" />
         <div className="mb-1.5 flex shrink-0 items-start justify-between max-md:mb-0 max-md:items-center max-md:pr-2 max-md:pl-5">
@@ -126,11 +153,11 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow,
           </DialogClose>
         </div>
         <DialogDescription className="mb-[22px] shrink-0 text-body text-muted-foreground max-md:sr-only">
-          Start a shell or Claude Code on {window.location.hostname}, or attach to a running swarm.
+          Start a shell or Claude Code on {window.location.hostname}, attach to a running swarm, or attach to Claude Code already running in tmux.
         </DialogDescription>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain max-md:px-4 max-md:pt-2">
-          <RadioGroup aria-label="Session type" value={kind} onValueChange={setKindFrom} className="mb-[22px] hidden grid-cols-3 gap-3 md:grid">
+          <RadioGroup aria-label="Session type" value={kind} onValueChange={setKindFrom} className="mb-[22px] hidden grid-cols-4 gap-3 md:grid">
             {KINDS.map((k) => (
               <Choice key={k.value} {...k} />
             ))}
@@ -140,7 +167,7 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow,
             aria-label="Session type"
             value={kind}
             onValueChange={setKindFrom}
-            className="mb-3.5 grid h-(--picker-seg-h) shrink-0 grid-cols-3 overflow-hidden rounded-full border border-grey-74 md:hidden"
+            className="mb-3.5 grid h-(--picker-seg-h) shrink-0 grid-cols-4 overflow-hidden rounded-full border border-grey-74 md:hidden"
           >
             {KINDS.map((k) => (
               <RadioGroupPrimitive.Item
@@ -154,7 +181,50 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow,
             ))}
           </RadioGroupPrimitive.Root>
 
-          {kind === "swarm" ? (
+          {kind === "existing" ? (
+            <>
+              <div className="mb-2 flex items-baseline justify-between">
+                <b className="font-semibold">Claude Code running in tmux</b>
+                <small className="text-caption text-muted-foreground">{existingNote}</small>
+              </div>
+              <div className="mb-[22px] max-h-60 shrink-0 overflow-y-auto rounded-md border border-grey-88">
+                {existing.kind === "loading" && <p className="px-4 py-3.5 text-muted-foreground">Loading tmux panes…</p>}
+                {existing.kind === "error" && <p className="break-all px-4 py-3.5 text-destructive">{existing.message}</p>}
+                {existing.kind === "ready" && existing.panes.length === 0 && (
+                  <p className="px-4 py-3.5 text-muted-foreground">No Claude Code panes in tmux on this host</p>
+                )}
+                {existing.kind === "ready" &&
+                  existing.errors.map((e) => (
+                    <p key={e.socket} className="break-all border-t border-grey-94 px-4 py-3.5 text-destructive first:border-t-0">
+                      {e.socket}: {e.message}
+                    </p>
+                  ))}
+                {existing.kind === "ready" && existing.panes.length > 0 && (
+                  <RadioGroup aria-label="Claude Code pane" value={pickedPane ?? ""} onValueChange={setPickedPane} className="gap-0">
+                    {existing.panes.map((p) => {
+                      const key = paneKey(p)
+                      const id = `pane-${key}`
+                      return (
+                        <Label
+                          key={key}
+                          htmlFor={id}
+                          className="grid cursor-pointer grid-cols-[20px_1fr] items-center gap-3.5 border-t border-grey-94 px-4 py-3.5 text-body font-normal first:border-t-0 hover:bg-grey-98 has-[[data-state=checked]]:bg-accent"
+                        >
+                          <RadioGroupItem id={id} value={key} />
+                          <span className="min-w-0">
+                            <b className="block truncate font-semibold">{baseName(p.cwd)}</b>
+                            <code className="block truncate font-mono text-caption text-muted-foreground">
+                              {p.socket} · {p.session}:{p.window} · {p.id}
+                            </code>
+                          </span>
+                        </Label>
+                      )
+                    })}
+                  </RadioGroup>
+                )}
+              </div>
+            </>
+          ) : kind === "swarm" ? (
             <>
               <div className="mb-2 flex items-baseline justify-between">
                 <b className="font-semibold">Available swarm sockets</b>
@@ -224,7 +294,7 @@ export function NewSessionDialog({ open, onOpenChange, onCreate, hidden, onShow,
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 max-md:mt-2.5 max-md:border-t max-md:border-grey-94 max-md:px-4 max-md:pt-3 max-md:pb-[max(24px,env(safe-area-inset-bottom))]">
-          {kind !== "swarm" && (
+          {!listsSession && (
             <span className="mr-auto flex items-center gap-1.5 text-caption whitespace-nowrap text-muted-foreground max-md:hidden">
               <kbd className={KBD}>↵</kbd>in <kbd className={KBD}>⌫</kbd>up
             </span>
