@@ -15,8 +15,9 @@ func TestAttachArgv(t *testing.T) {
 		panes string
 		want  []string
 	}{
-		{"s:0 zsh\ns:1 claude.exe\ns:15 zsh\ns:15 claude.exe\ns:15 claude.exe\n", []string{"tmux", "-S", sock, "set-option", "-t", "s:15", "mouse", "on", ";", "a", "-t", "s:15"}},
-		{"s:0 zsh\n", []string{"tmux", "-S", sock, "a"}},
+		{"s:0 zsh\ns:1 claude.exe\ns:15 zsh\ns:15 claude.exe\ns:15 claude.exe\n", []string{"tmux", "-S", sock, "set-option", "-t", "s:15", "mouse", "on", ";",
+			"select-window", "-t", "s:15", ";", "select-pane", "-t", "s:15", ";", "attach-session", "-t", "s:15"}},
+		{"s:0 zsh\n", []string{"tmux", "-S", sock, "set-option", "mouse", "on", ";", "select-window", ";", "select-pane", ";", "attach-session"}},
 	} {
 		if got := attachArgv(sock, tc.panes); !slices.Equal(got, tc.want) {
 			t.Errorf("attachArgv(%q): expected %v, got %v", tc.panes, tc.want, got)

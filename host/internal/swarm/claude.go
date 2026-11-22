@@ -94,9 +94,7 @@ func ClaudePanes(ctx context.Context, dir string) ([]Pane, []SocketError, error)
 	return panes, failed, nil
 }
 
-// PaneAttachArgv is the command that shows pane id on socket name: it turns on mouse mode, selects the pane's window
-// and the pane (all persist in the tmux server), then attaches to the pane's session.
+// PaneAttachArgv is the command that shows pane id on socket name (targetAttachArgv with the pane as target).
 func PaneAttachArgv(dir, name, id string) []string {
-	argv := append([]string{"tmux", "-S", filepath.Join(dir, name)}, mouseOn(id)...)
-	return append(argv, "select-window", "-t", id, ";", "select-pane", "-t", id, ";", "attach-session", "-t", id)
+	return targetAttachArgv(filepath.Join(dir, name), id)
 }

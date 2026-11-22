@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 )
@@ -117,19 +118,23 @@ func AttachArgv(ctx context.Context, dir, name string) ([]string, error) {
 
 // attachArgv builds the attach command for socket path sock from `tmux list-panes` output.
 func attachArgv(sock, listPanes string) []string {
-	argv := []string{"tmux", "-S", sock}
-	if target, ok := memberTarget(listPanes); ok {
-		return append(append(argv, mouseOn(target)...), "a", "-t", target)
-	}
-	return append(argv, "a")
+	target, _ := memberTarget(listPanes)
+	return targetAttachArgv(sock, target)
 }
 
-// mouseOn turns on mouse mode for target's session, followed by a command separator.
+// targetAttachArgv is the one attach command for every tmux tab on socket path sock: it turns on mouse mode for
+// target's session, selects target's window and pane (all persist in the tmux server), then attaches to the session.
+// Empty target: no -t, so every command acts on tmux's default session, the one a bare attach shows.
 // Claude Code's transcript lives in tmux's scrollback, which only tmux can scroll: with mouse on, the wheel
 // (and touch drags, sent as wheel events) enters copy mode and scrolls instead of reaching Claude as arrow keys.
-// It is a session option, so it stays on for other clients of that session too.
-func mouseOn(target string) []string {
-	return []string{"set-option", "-t", target, "mouse", "on", ";"}
+// Mouse is a session option, so it stays on for other clients of that session too.
+func targetAttachArgv(sock, target string) []string {
+	t := []string{}
+	if target != "" {
+		t = []string{"-t", target}
+	}
+	return slices.Concat([]string{"tmux", "-S", sock, "set-option"}, t, []string{"mouse", "on", ";", "select-window"}, t,
+		[]string{";", "select-pane"}, t, []string{";", "attach-session"}, t)
 }
 
 // IsName reports whether name is a bare swarm socket name (Prefix, no path separators).
